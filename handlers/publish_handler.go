@@ -16,10 +16,13 @@ type Message struct {
 	Id         string         `json:"id"`
 	Data       map[string]any `json:"data"`
 	ReceivedAt time.Time      `json:"received_at"`
+	StressTest bool           `json:"stress-test"`
 }
 
 func (m *Message) Instantiate() error {
-	if m.Origin == "" {
+	if m.Origin == "" && m.StressTest == true {
+		m.Origin = uuid.New().String()
+	} else if m.Origin == "" {
 		return errors.New("Origin is required")
 	}
 
