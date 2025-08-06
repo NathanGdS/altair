@@ -93,7 +93,6 @@ func processFile(fileName string) {
 		log.Println("Error opening file:", err)
 		return
 	}
-	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
 
@@ -128,6 +127,9 @@ func processFile(fileName string) {
 	file.Close()
 
 	processedFilePath := fmt.Sprintf("messages/processed/%s", fileName)
+
+	fileMutex.Lock()
+	defer fileMutex.Unlock()
 
 	// Verifica se o arquivo já existe em processed
 	processedFile, err := os.Open(processedFilePath)

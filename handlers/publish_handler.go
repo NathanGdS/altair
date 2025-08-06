@@ -70,14 +70,6 @@ func appendOnFile(message []byte, origin string, retry int) {
 	// create file based on the current date
 	filePath := getFilePath(origin)
 
-	// create the directory if it doesn't exist
-	err := os.MkdirAll("messages/ready", os.ModePerm)
-	if err != nil {
-		fmt.Println("Error creating directory:", err)
-		appendOnFile(message, origin, retry+1)
-		return
-	}
-
 	// open file with proper flags for append
 	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
