@@ -4,6 +4,7 @@ POST http://localhost:8080/publish
 Content-Type: application/json
 
 {
+	"origin": "test",
 	"data": {
 		"id": "1",
 		"name": "John Doe",
