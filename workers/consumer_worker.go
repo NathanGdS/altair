@@ -126,7 +126,8 @@ func processFile(fileName string) {
 	// Fecha o arquivo antes de tentar movê-lo
 	file.Close()
 
-	processedFilePath := fmt.Sprintf("messages/processed/%s", fileName)
+	timeNow := time.Now().Format("2006-01-02-15")
+	processedFilePath := fmt.Sprintf("messages/processed/%s.json", timeNow)
 
 	fileMutex.Lock()
 	defer fileMutex.Unlock()
