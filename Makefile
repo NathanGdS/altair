@@ -6,3 +6,9 @@ build:
 
 run-build:
 	@./altair
+
+test:
+	@go test -v ./...
+
+test-watch:
+	@reflex -r '\.go$$' go test -v ./...
