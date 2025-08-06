@@ -1,0 +1,17 @@
+### Publish a message
+
+POST http://localhost:8080/publish
+Content-Type: application/json
+
+{
+	"data": {
+		"id": "1",
+		"name": "John Doe",
+		"email": "john.doe@example.com",
+		"account": {
+			"id": "1",
+			"name": "John Doe",
+			"email": "john.doe@example.com"
+        }
+	}
+}   
