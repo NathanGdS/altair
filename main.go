@@ -18,6 +18,7 @@ func main() {
 	http.HandleFunc("POST /publish", handlers.PublishHandler)
 
 	go workers.ConsumerWorker()
+	go workers.PurgeMessagesWorker()
 
 	fmt.Println("Server is running on port 8080")
 	server := &http.Server{Addr: ":8080", Handler: nil}
