@@ -6,6 +6,8 @@ import (
 	"log"
 	"os"
 	"time"
+
+	"github.com/nathangds/altair/shared"
 )
 
 func RemoveEmptyFilesWorker() {
@@ -15,7 +17,7 @@ func RemoveEmptyFilesWorker() {
 		log.Println("[Remove-Empty-Files] Removing empty files")
 		removeEmptyFiles()
 		log.Println("[Remove-Empty-Files] Empty files removed")
-		time.Sleep(10 * time.Second)
+		time.Sleep(shared.RemoveEmptyFilesInterval)
 	}
 }
 

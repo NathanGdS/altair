@@ -10,9 +10,8 @@ import (
 	"time"
 
 	"github.com/nathangds/altair/handlers"
+	"github.com/nathangds/altair/shared"
 )
-
-const purgeIntervalInMinutes = 15 * time.Second
 
 func PurgeMessagesWorker() {
 	log.Println("Starting purge messages worker")
@@ -21,7 +20,7 @@ func PurgeMessagesWorker() {
 		log.Println("Purging messages")
 		purgeMessages()
 		log.Println("Messages purged")
-		time.Sleep(purgeIntervalInMinutes)
+		time.Sleep(shared.PurgeInterval)
 	}
 }
 
@@ -75,7 +74,7 @@ func removeLineFromFile(file *os.File) {
 			continue
 		}
 
-		if !message.ReceivedAt.Before(time.Now().Add(-purgeIntervalInMinutes)) {
+		if !message.ReceivedAt.Before(time.Now().Add(-shared.PurgeInterval)) {
 			lines = append(lines, line)
 		}
 	}
