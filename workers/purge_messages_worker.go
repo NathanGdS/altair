@@ -12,7 +12,7 @@ import (
 	"github.com/nathangds/altair/handlers"
 )
 
-const purgeIntervalInMinutes = 10 * time.Minute
+const purgeIntervalInMinutes = 15 * time.Second
 
 func PurgeMessagesWorker() {
 	log.Println("Starting purge messages worker")
@@ -87,10 +87,6 @@ func removeLineFromFile(file *os.File) {
 
 	// Fecha o arquivo original antes de criar o temporário
 	file.Close()
-
-	if len(lines) == 0 {
-		return
-	}
 
 	tempFileName := originalFileName + ".tmp"
 	tempFile, err := os.Create(tempFileName)

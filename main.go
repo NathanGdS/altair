@@ -19,6 +19,7 @@ func main() {
 
 	go workers.ConsumerWorker()
 	go workers.PurgeMessagesWorker()
+	go workers.RemoveEmptyFilesWorker()
 
 	fmt.Println("Server is running on port 8080")
 	server := &http.Server{Addr: ":8080", Handler: nil}
