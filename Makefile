@@ -2,10 +2,10 @@ run:
 	@go run ./main.go 
 
 build:
-	@go build -o altair ./main.go
+	@go build -o ./bin/altair ./main.go
 
 run-build:
-	@./altair
+	@./bin/altair
 
 test:
 	@go test -v ./...
