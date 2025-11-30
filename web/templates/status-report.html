@@ -1,0 +1,18 @@
+{{define "StatusReport"}}
+<div id="current-process-display" hx-get="/status-report" hx-trigger="from:body, every 1s">
+    <p style="font-size: larger;">Purging interval: {{.PurgingInterval}} minutes</p>
+    <table>
+        <tr style="display: flex;text-align: center; column-gap: 1em;">
+            <th>
+                <p style="font-size: larger;">Pending Messages: {{.PendingMessages}}</p>
+            </th>
+            <th>
+                <p style="color: green;font-size: larger;">Delivered Messages: {{.ProcessedMessages}}</p>
+            </th>
+        </tr>
+    </table>
+
+    <hr>
+</div>
+
+{{end}}
