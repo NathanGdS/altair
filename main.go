@@ -11,12 +11,13 @@ import (
 	"time"
 
 	"github.com/nathangds/altair/handlers"
+	"github.com/nathangds/altair/web"
 	"github.com/nathangds/altair/workers"
 )
 
 func main() {
 	http.HandleFunc("POST /publish", handlers.PublishHandler)
-
+	web.RegisterWebHandlers()
 	go workers.ConsumerWorker()
 	go workers.PurgeMessagesWorker()
 	go workers.RemoveEmptyFilesWorker()
