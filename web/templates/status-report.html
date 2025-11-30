@@ -1,7 +1,30 @@
 {{define "StatusReport"}}
-<div id="current-process-display" hx-get="/status-report" hx-trigger="from:body, every 1s">
-    <p style="font-size: larger;">Purging interval: {{.PurgingInterval}} minutes</p>
-    <table>
+<div id="current-process-display" hx-get="/status-report" hx-trigger="from:body, every 1s" class="block">
+    <section class="hero is-info is-small">
+        <div class="hero-body">
+            <p class="title">Purging Interval</p>
+            <p class="subtitle">{{.PurgingInterval}} minutes</p>
+        </div>
+    </section>
+    <!-- <p style="font-size: larger;">Purging interval: {{.PurgingInterval}} minutes</p> -->
+    <!-- <p style="font-size: larger;">Pending Messages: {{.PendingMessages}}</p> -->
+    <!-- <p style="color: green;font-size: larger;">Delivered Messages: {{.ProcessedMessages}}</p> -->
+    <nav class="level">
+        <div class="level-item has-text-centered">
+            <div>
+                <p class="heading">Pending Messages</p>
+                <p class="title">{{.PendingMessages}}</p>
+            </div>
+        </div>
+                <div class="level-item has-text-centered">
+            <div>
+                <p class="heading">Delivered Messages</p>
+                <p class="title">{{.ProcessedMessages}}</p>
+            </div>
+        </div>
+    </nav>
+    <!-- <table class="table">
+        <thead>
         <tr style="display: flex;text-align: center; column-gap: 1em;">
             <th>
                 <p style="font-size: larger;">Pending Messages: {{.PendingMessages}}</p>
@@ -10,9 +33,10 @@
                 <p style="color: green;font-size: larger;">Delivered Messages: {{.ProcessedMessages}}</p>
             </th>
         </tr>
+        </thead>
     </table>
 
-    <hr>
+    <hr> -->
 </div>
 
 {{end}}
