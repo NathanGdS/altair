@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -26,6 +27,7 @@ type Report struct {
 	PurgingInterval   int
 	PendingMessages   int
 	ProcessedMessages int
+	DeliveryProgress  float64
 }
 
 func RegisterWebHandlers() {
@@ -52,10 +54,15 @@ func RegisterWebHandlers() {
 			log.Println("Error on fetching total processed messages! " + tpmErr.Error())
 		}
 
+		totalMessages := pedingMessages + totalProcessedMessages
+
+		percentage := (float64(totalProcessedMessages) / float64(totalMessages)) * 100
+
 		report := Report{
 			PurgingInterval:   int(shared.PurgeInterval / time.Minute),
 			PendingMessages:   pedingMessages,
 			ProcessedMessages: totalProcessedMessages,
+			DeliveryProgress:  roundToTwoDecimalPlaces(percentage),
 		}
 
 		err := tmpl.ExecuteTemplate(w, "StatusReport", report)
@@ -153,4 +160,13 @@ func scanAndSumLines(rootDir string) (int, error) {
 	}
 
 	return totalLines, nil
+}
+
+func roundToTwoDecimalPlaces(f float64) float64 {
+	// Multiply by 100 to shift the decimal two places to the right
+	shifted := f * 100
+	// Round to the nearest integer
+	roundedShifted := math.Round(shifted)
+	// Divide by 100 to shift the decimal back
+	return roundedShifted / 100
 }

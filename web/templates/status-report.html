@@ -1,14 +1,11 @@
 {{define "StatusReport"}}
-<div id="current-process-display" hx-get="/status-report" hx-trigger="from:body, every 1s" class="block">
-    <section class="hero is-info is-small">
+<div id="current-process-display" hx-get="/status-report" hx-trigger="from:body, every 1s" class="container">
+    <section class="hero is-link is-small">
         <div class="hero-body">
-            <p class="title">Purging Interval</p>
-            <p class="subtitle">{{.PurgingInterval}} minutes</p>
+            <p class="title">Altair</p>
+            <p class="subtitle">Message Broker</p>
         </div>
     </section>
-    <!-- <p style="font-size: larger;">Purging interval: {{.PurgingInterval}} minutes</p> -->
-    <!-- <p style="font-size: larger;">Pending Messages: {{.PendingMessages}}</p> -->
-    <!-- <p style="color: green;font-size: larger;">Delivered Messages: {{.ProcessedMessages}}</p> -->
     <nav class="level">
         <div class="level-item has-text-centered">
             <div>
@@ -16,27 +13,37 @@
                 <p class="title">{{.PendingMessages}}</p>
             </div>
         </div>
-                <div class="level-item has-text-centered">
+        <div class="level-item has-text-centered">
             <div>
                 <p class="heading">Delivered Messages</p>
                 <p class="title">{{.ProcessedMessages}}</p>
             </div>
         </div>
+        <div class="level-item has-text-centered">
+            <div>
+                <p class="heading">Purging Interval</p>
+                <p class="title">{{.PurgingInterval}} minutes</p>
+            </div>
+        </div>
     </nav>
-    <!-- <table class="table">
-        <thead>
-        <tr style="display: flex;text-align: center; column-gap: 1em;">
-            <th>
-                <p style="font-size: larger;">Pending Messages: {{.PendingMessages}}</p>
-            </th>
-            <th>
-                <p style="color: green;font-size: larger;">Delivered Messages: {{.ProcessedMessages}}</p>
-            </th>
-        </tr>
-        </thead>
-    </table>
 
-    <hr> -->
+    <div class="columns is-mobile is-centered">
+        <div class="column has-text-centered">
+            <h2 class="title is-4">Delivery Rate</h2>
+        </div>
+    </div>
+
+    <div class="columns is-vcentered">
+        <div class="column is-four-fifths">
+            <progress class="progress is-primary" value="{{.DeliveryProgress}}" max="100">
+                {{.DeliveryProgress}}%
+            </progress>
+        </div>
+        <div class="column">
+            <span class="tag is-primary"> {{.DeliveryProgress}}% </span>
+        </div>
+    </div>
+
 </div>
 
 {{end}}
