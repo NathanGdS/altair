@@ -4,12 +4,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+/* ============================================================
+   MODELO DA MENSAGEM
+============================================================ */
 
 type Message struct {
 	Origin     string         `json:"origin"`
@@ -20,17 +25,68 @@ type Message struct {
 }
 
 func (m *Message) Instantiate() error {
-	if m.Origin == "" && m.StressTest == true {
-		m.Origin = uuid.New().String()
+	if m.Origin == "" && m.StressTest {
+		m.Origin = "stress-test"
 	} else if m.Origin == "" {
 		return errors.New("Origin is required")
 	}
 
 	m.Id = uuid.New().String()
 	m.ReceivedAt = time.Now().UTC()
-
 	return nil
 }
+
+type writePacket struct {
+	Message []byte
+	Origin  string
+}
+
+var fileWriterChan chan writePacket
+
+func init() {
+	fileWriterChan = make(chan writePacket, 200000) // buffer grande
+	go fileWriterWorker()
+}
+
+func fileWriterWorker() {
+	for pkt := range fileWriterChan {
+		writeToFile(pkt.Message, pkt.Origin)
+	}
+}
+
+func writeToFile(message []byte, origin string) {
+	filePath := getFilePath(origin)
+
+	// abre o arquivo (um único writer do programa garante segurança)
+	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		fmt.Println("Error opening file:", err)
+		return
+	}
+	defer f.Close()
+
+	// adiciona newline se o arquivo já tem conteúdo
+	stat, err := f.Stat()
+	if err == nil && stat.Size() > 0 {
+		_, err = f.WriteString("\n")
+		if err != nil {
+			fmt.Println("Error writing newline:", err)
+			return
+		}
+	}
+
+	_, err = f.Write(message)
+	if err != nil {
+		fmt.Println("Error writing to file:", err)
+		return
+	}
+
+	log.Println("Message appended to:", filePath)
+}
+
+/* ============================================================
+   HANDLER HTTP
+============================================================ */
 
 func PublishHandler(w http.ResponseWriter, r *http.Request) {
 	message := Message{}
@@ -44,63 +100,26 @@ func PublishHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Println(message)
-
 	jsonBytes, err := json.Marshal(message)
-
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
 		return
 	}
 
-	go appendOnFile(jsonBytes, message.Origin, 0)
+	// envia para o worker assíncrono
+	fileWriterChan <- writePacket{
+		Message: jsonBytes,
+		Origin:  message.Origin,
+	}
 
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsonBytes)
 }
 
-func appendOnFile(message []byte, origin string, retry int) {
-
-	if retry > 3 {
-		fmt.Println("Failed to append message to file after 3 retries")
-		return
-	}
-
-	// create file based on the current date
-	filePath := getFilePath(origin)
-
-	// open file with proper flags for append
-	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
-	if err != nil {
-		fmt.Println("Error opening file:", err)
-		appendOnFile(message, origin, retry+1)
-		return
-	}
-	defer f.Close()
-
-	// add newline before appending (except if file is empty)
-	stat, err := f.Stat()
-	if err == nil && stat.Size() > 0 {
-		// file exists and has content, add newline
-		_, err = f.WriteString("\n")
-		if err != nil {
-			fmt.Println("Error writing newline:", err)
-			appendOnFile(message, origin, retry+1)
-			return
-		}
-	}
-
-	// append the message to the file
-	_, err = f.Write(message)
-	if err != nil {
-		fmt.Println("Error writing to file:", err)
-		appendOnFile(message, origin, retry+1)
-		return
-	}
-
-	fmt.Println("Message appended to file:", filePath)
-}
+/* ============================================================
+   UTIL
+============================================================ */
 
 func getFilePath(origin string) string {
 	fileName := time.Now().Format("2006-01-02")
