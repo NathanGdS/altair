@@ -19,7 +19,7 @@ func main() {
 	http.HandleFunc("POST /publish", handlers.PublishHandler)
 	web.RegisterWebHandlers()
 	go workers.ConsumerWorker()
-	go workers.PurgeMessagesWorker()
+	// go workers.PurgeMessagesWorker()
 	go workers.RemoveEmptyFilesWorker()
 
 	fmt.Println("Server is running on port 8080")
