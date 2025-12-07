@@ -9,6 +9,7 @@ Altair is an asynchronous messaging system that allows sending and receiving mes
 ## 🛠️ Technologies
 
 - **Go** - Main language (strong in concurrency and performance)
+- **Htmx** - Simple Dashboard
 - **Append-only Log** - Data persistence
 - **Distributed System** - Scalable architecture
 - **HTTP Push** - Consumer delivery strategy
@@ -48,6 +49,22 @@ make run
 # Or directly with Go
 go run ./main.go
 ```
+
+## Accessing the Dashboard
+
+Access the following Url:
+
+`http://localhost:8080/`
+
+### Dashboard Features
+
+- Pending messages to be delivered
+- Delivered Messages
+- Current Purge interval
+- Progress bar of delivered messages
+
+![alt text](docs/dashboard-preview.png)
+
 
 ## 🎯 Technical Challenges
 
