@@ -13,9 +13,8 @@ import (
 )
 
 var (
-	processingFiles = make(map[string]bool)
-	processingMutex sync.RWMutex
-	fileMutex       sync.Mutex
+	processingFiles = sync.Map{}
+	fileLocks       sync.Map
 	initialized     bool
 	initMutex       sync.Mutex
 )
@@ -39,13 +38,11 @@ func ConsumerWorker() {
 			fileName := file.Name()
 
 			// Verifica se o arquivo já está sendo processado
-			processingMutex.Lock()
-			if processingFiles[fileName] {
-				processingMutex.Unlock()
+			if _, loaded := processingFiles.LoadOrStore(fileName, true); loaded {
 				continue
 			}
-			processingFiles[fileName] = true
-			processingMutex.Unlock()
+
+			processingFiles.Delete(fileName)
 
 			log.Println("Processing file:", fileName)
 			go processFile(fileName)
@@ -78,11 +75,7 @@ func initDirectories() {
 }
 
 func processFile(fileName string) {
-	defer func() {
-		processingMutex.Lock()
-		delete(processingFiles, fileName)
-		processingMutex.Unlock()
-	}()
+	defer processingFiles.Delete(fileName)
 
 	log.Println("Processing file:", fileName)
 
@@ -129,8 +122,11 @@ func processFile(fileName string) {
 	timeNow := time.Now().Format("2006-01-02-15")
 	processedFilePath := fmt.Sprintf("messages/processed/%s.json", timeNow)
 
-	fileMutex.Lock()
-	defer fileMutex.Unlock()
+	l, _ := fileLocks.LoadOrStore(processedFilePath, &sync.Mutex{})
+	lock := l.(*sync.Mutex)
+
+	lock.Lock()
+	defer lock.Unlock()
 
 	// Verifica se o arquivo já existe em processed
 	processedFile, err := os.Open(processedFilePath)
