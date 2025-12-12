@@ -44,7 +44,7 @@ type writePacket struct {
 var fileWriterChan chan writePacket
 
 func init() {
-	fileWriterChan = make(chan writePacket, 200000) // buffer grande
+	fileWriterChan = make(chan writePacket, 200000)
 	go fileWriterWorker()
 }
 
@@ -57,7 +57,6 @@ func fileWriterWorker() {
 func writeToFile(message []byte, origin string) {
 	filePath := getFilePath(origin)
 
-	// abre o arquivo (um único writer do programa garante segurança)
 	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		fmt.Println("Error opening file:", err)
@@ -65,7 +64,6 @@ func writeToFile(message []byte, origin string) {
 	}
 	defer f.Close()
 
-	// adiciona newline se o arquivo já tem conteúdo
 	stat, err := f.Stat()
 	if err == nil && stat.Size() > 0 {
 		_, err = f.WriteString("\n")
@@ -83,10 +81,6 @@ func writeToFile(message []byte, origin string) {
 
 	log.Println("Message appended to:", filePath)
 }
-
-/* ============================================================
-   HANDLER HTTP
-============================================================ */
 
 func PublishHandler(w http.ResponseWriter, r *http.Request) {
 	message := Message{}
@@ -107,7 +101,7 @@ func PublishHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// envia para o worker assíncrono
+	// send to async worker
 	fileWriterChan <- writePacket{
 		Message: jsonBytes,
 		Origin:  message.Origin,
@@ -116,10 +110,6 @@ func PublishHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsonBytes)
 }
-
-/* ============================================================
-   UTIL
-============================================================ */
 
 func getFilePath(origin string) string {
 	fileName := time.Now().Format("2006-01-02")

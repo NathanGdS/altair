@@ -33,6 +33,7 @@ func startConsumerLoop() {
 	fmt.Printf("[consumer] innitialized, running every %d second", shared.ConsumerRunningInterval)
 
 	for {
+		log.Println("[INFO] Consuming messages")
 		processMessages()
 		time.Sleep(shared.ConsumerRunningInterval)
 	}
@@ -89,7 +90,6 @@ func readMessagesFromFile(path string, msgChan chan<- message) {
 		}
 	}
 
-	// Zerar o arquivo após leitura
 	_ = os.Truncate(path, 0)
 }
 
@@ -100,12 +100,12 @@ func processSingleMessage(msg message) {
 
 func saveProcessed(line string) {
 	now := time.Now()
-	hourFolder := now.Format("20060102_15") // exemplo: 20251207_18
+	hourFile := now.Format("20060102_15") + ".json" // ex: 20251207_19.json
 
-	dir := filepath.Join(ProcessedDir, hourFolder)
-	os.MkdirAll(dir, 0755)
+	filePath := filepath.Join(ProcessedDir, hourFile)
 
-	filePath := filepath.Join(dir, "processed.json")
+	os.MkdirAll(ProcessedDir, 0755)
+
 	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Println("[ERRO] ao salvar processed:", err)
