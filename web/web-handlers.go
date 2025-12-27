@@ -42,7 +42,7 @@ func RegisterWebHandlers() {
 	})
 
 	http.HandleFunc("GET /status-report", func(w http.ResponseWriter, r *http.Request) {
-		pedingMessages, pmErr := countFilesInDirectory("messages/ready")
+		pedingMessages, pmErr := scanAndSumLines("messages/ready")
 
 		if pmErr != nil {
 			log.Println("Error on fetching peding messages from directory: " + pmErr.Error())
@@ -74,20 +74,20 @@ func RegisterWebHandlers() {
 	})
 }
 
-func countFilesInDirectory(dirPath string) (int, error) {
-	entries, err := os.ReadDir(dirPath)
-	if err != nil {
-		return 0, fmt.Errorf("failed to read directory: %w", err)
-	}
+// func countFilesInDirectory(dirPath string) (int, error) {
+// 	entries, err := os.ReadDir(dirPath)
+// 	if err != nil {
+// 		return 0, fmt.Errorf("failed to read directory: %w", err)
+// 	}
 
-	fileCount := 0
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			fileCount++
-		}
-	}
-	return fileCount, nil
-}
+// 	fileCount := 0
+// 	for _, entry := range entries {
+// 		if !entry.IsDir() {
+// 			fileCount++
+// 		}
+// 	}
+// 	return fileCount, nil
+// }
 
 // countLines lê o arquivo e conta o número de quebras de linha ('\n').
 // Esta é uma maneira eficiente de contar linhas em Go, usando um buffer.
