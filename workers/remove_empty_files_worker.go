@@ -41,7 +41,7 @@ func DeleteMakedFiles() {
 		}
 
 		log.Println("Cleaned trash files")
-		time.Sleep(10 * time.Minute)
+		time.Sleep(shared.RemoveMakedFilesInterval)
 	}
 }
 
