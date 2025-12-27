@@ -117,7 +117,7 @@ func saveProcessed(line string) {
 }
 
 func initDirectories() {
-	dirs := []string{"messages/ready", "messages/processed"}
+	dirs := []string{"messages/ready", "messages/processed", "messages/trash"}
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 			log.Println("Error creating directory:", dir, err)
