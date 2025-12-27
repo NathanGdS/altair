@@ -12,10 +12,6 @@ import (
 	"github.com/google/uuid"
 )
 
-/* ============================================================
-   MODELO DA MENSAGEM
-============================================================ */
-
 type Message struct {
 	Origin     string         `json:"origin"`
 	Id         string         `json:"id"`
