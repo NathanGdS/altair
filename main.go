@@ -20,7 +20,9 @@ func main() {
 	web.RegisterWebHandlers()
 	go workers.ConsumerWorker()
 	go workers.PurgeMessagesWorker()
-	go workers.RemoveEmptyFilesWorker()
+	go workers.RemoveEmptyFilesWorker("messages/processed")
+	go workers.RemoveEmptyFilesWorker("messages/ready")
+	go workers.DeleteMakedFiles()
 
 	fmt.Println("Server is running on port 8080")
 	server := &http.Server{Addr: ":8080", Handler: nil}

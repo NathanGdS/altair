@@ -8,8 +8,9 @@ import (
 
 const (
 	PurgeInterval            = 15 * time.Minute
-	RemoveEmptyFilesInterval = 5 * time.Minute
+	RemoveEmptyFilesInterval = 7 * time.Second
 	ConsumerRunningInterval  = 5 * time.Second
+	RemoveMakedFilesInterval = 15 * time.Minute
 )
 
 var ConsumerWorkingPool = getWorkingPool()

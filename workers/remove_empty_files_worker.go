@@ -5,24 +5,48 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/nathangds/altair/shared"
 )
 
-func RemoveEmptyFilesWorker() {
-	log.Println("[Remove-Empty-Files] woker innitiated!")
+func RemoveEmptyFilesWorker(folderPath string) {
+	log.Printf("[Remove-Empty-Files] woker innitiated! (%s)", folderPath)
 
 	for {
-		log.Println("[Remove-Empty-Files] Removing empty files")
-		removeEmptyFiles()
-		log.Println("[Remove-Empty-Files] Empty files removed")
+		log.Printf("[Remove-Empty-Files] Removing empty files on folder (%s)", folderPath)
+		markToDelete(folderPath)
+		log.Println("[Remove-Empty-Files] Woker finished execution")
 		time.Sleep(shared.RemoveEmptyFilesInterval)
 	}
 }
 
-func removeEmptyFiles() {
-	files, err := os.ReadDir("messages/processed")
+func DeleteMakedFiles() {
+	log.Println("[Delete-Marked-Files] woker innitiated!")
+
+	for {
+		const dir = "messages/trash"
+		files, err := os.ReadDir(dir)
+
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		for _, f := range files {
+			err := os.RemoveAll(filepath.Join(dir, f.Name()))
+			if err != nil {
+				log.Printf("failed to remove %s: %v", f.Name(), err)
+			}
+		}
+
+		log.Println("Cleaned trash files")
+		time.Sleep(shared.RemoveMakedFilesInterval)
+	}
+}
+
+func markToDelete(folderPath string) {
+	files, err := os.ReadDir(folderPath)
 	if err != nil {
 		log.Println("Error reading directory:", err)
 		return
@@ -33,14 +57,20 @@ func removeEmptyFiles() {
 		if fileName == "" {
 			continue
 		}
+		fullPath := filepath.Join(folderPath, file.Name())
 
-		linesSize, err := countLines("messages/processed/" + fileName)
+		linesSize, err := countLines(fullPath)
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		if linesSize <= 0 {
-			os.Remove("messages/processed/" + fileName)
+			err := os.Rename(fullPath, "messages/trash/"+fileName)
+
+			if err != nil {
+				log.Printf("Failed to remove file %s: %v", fullPath, err)
+			}
+
 			log.Printf("File %s removed for being empty", "messages/processed/"+fileName)
 		}
 	}
