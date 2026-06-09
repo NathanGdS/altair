@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nathangds/altair/shared"
 )
 
 type Message struct {
@@ -55,7 +55,7 @@ func writeToFile(message []byte, origin string) {
 
 	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
-		fmt.Println("Error opening file:", err)
+		shared.Log.Error("Error opening file: " + err.Error())
 		return
 	}
 	defer f.Close()
@@ -64,18 +64,18 @@ func writeToFile(message []byte, origin string) {
 	if err == nil && stat.Size() > 0 {
 		_, err = f.WriteString("\n")
 		if err != nil {
-			fmt.Println("Error writing newline:", err)
+			shared.Log.Error("Error writing newline:" + err.Error())
 			return
 		}
 	}
 
 	_, err = f.Write(message)
 	if err != nil {
-		fmt.Println("Error writing to file:", err)
+		shared.Log.Error("Error writing to file: " + err.Error())
 		return
 	}
 
-	log.Println("Message appended to:", filePath)
+	shared.Log.Info("Message appended to: " + filePath)
 }
 
 func PublishHandler(w http.ResponseWriter, r *http.Request) {

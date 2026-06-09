@@ -4,22 +4,23 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/nathangds/altair/handlers"
 	"github.com/nathangds/altair/shared"
 )
 
 func PurgeMessagesWorker() {
-	log.Println("Starting purge messages worker")
+	shared.Log.Info("Starting purge messages worker")
 
 	for {
-		log.Println("Purging messages")
+		shared.Log.Info("Purging messages")
 		purgeMessages()
-		log.Println("Messages purged")
+		shared.Log.Info("Messages purged")
 		time.Sleep(shared.PurgeInterval)
 	}
 }
@@ -27,19 +28,17 @@ func PurgeMessagesWorker() {
 func purgeMessages() {
 	files, err := os.ReadDir("messages/processed")
 	if err != nil {
-		log.Println("Error reading directory:", err)
+		shared.Log.Error("Error reading directory", zap.Error(err))
 		return
 	}
 
 	for _, file := range files {
 		fileName := file.Name()
 
-		// Ignora arquivos temporários (.tmp)
 		if strings.HasSuffix(fileName, ".tmp") {
 			continue
 		}
 
-		// Processa apenas arquivos .json
 		if !strings.HasSuffix(fileName, ".json") {
 			continue
 		}
@@ -47,7 +46,7 @@ func purgeMessages() {
 		filePath := fmt.Sprintf("messages/processed/%s", fileName)
 		file, err := os.Open(filePath)
 		if err != nil {
-			log.Println("Error opening file:", err)
+			shared.Log.Error("Error opening file", zap.Error(err))
 			continue
 		}
 		defer file.Close()
@@ -70,7 +69,7 @@ func removeLineFromFile(file *os.File) {
 		var message handlers.Message
 		err := json.Unmarshal([]byte(line), &message)
 		if err != nil {
-			log.Println("Error unmarshalling line:", err)
+			shared.Log.Error("Error unmarshalling line", zap.Error(err))
 			continue
 		}
 
@@ -80,17 +79,16 @@ func removeLineFromFile(file *os.File) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		log.Println("Error scanning file:", err)
+		shared.Log.Error("Error scanning file", zap.Error(err))
 		return
 	}
 
-	// Fecha o arquivo original antes de criar o temporário
 	file.Close()
 
 	tempFileName := originalFileName + ".tmp"
 	tempFile, err := os.Create(tempFileName)
 	if err != nil {
-		log.Println("Error creating temp file:", err)
+		shared.Log.Error("Error creating temp file", zap.Error(err))
 		return
 	}
 	defer tempFile.Close()
@@ -98,27 +96,24 @@ func removeLineFromFile(file *os.File) {
 	for _, line := range lines {
 		_, err := tempFile.WriteString(line + "\n")
 		if err != nil {
-			log.Println("Error writing line:", err)
+			shared.Log.Error("Error writing line", zap.Error(err))
 			return
 		}
 	}
 
-	// Fecha o arquivo temporário antes de fazer as operações de rename
 	tempFile.Close()
 
-	// Remove o arquivo original
 	err = os.Remove(originalFileName)
 	if err != nil {
-		log.Println("Error removing original file:", err)
+		shared.Log.Error("Error removing original file", zap.Error(err))
 		return
 	}
 
-	// Renomeia o arquivo temporário para o nome original
 	err = os.Rename(tempFileName, originalFileName)
 	if err != nil {
-		log.Println("Error renaming temp file:", err)
+		shared.Log.Error("Error renaming temp file", zap.Error(err))
 		return
 	}
 
-	log.Println("File purged:", originalFileName)
+	shared.Log.Info("File purged", zap.String("file", originalFileName))
 }
