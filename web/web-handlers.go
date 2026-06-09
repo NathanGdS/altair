@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"log"
 	"math"
 	"net/http"
 	"os"
@@ -13,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/nathangds/altair/shared"
 )
@@ -45,13 +46,13 @@ func RegisterWebHandlers() {
 		pedingMessages, pmErr := scanAndSumLines("messages/ready")
 
 		if pmErr != nil {
-			log.Println("Error on fetching peding messages from directory: " + pmErr.Error())
+			shared.Log.Error("Error on fetching pending messages from directory", zap.Error(pmErr))
 		}
 
 		totalProcessedMessages, tpmErr := scanAndSumLines("messages/processed")
 
 		if tpmErr != nil {
-			log.Println("Error on fetching total processed messages! " + tpmErr.Error())
+			shared.Log.Error("Error on fetching total processed messages", zap.Error(tpmErr))
 		}
 
 		totalMessages := pedingMessages + totalProcessedMessages
@@ -74,23 +75,6 @@ func RegisterWebHandlers() {
 	})
 }
 
-// func countFilesInDirectory(dirPath string) (int, error) {
-// 	entries, err := os.ReadDir(dirPath)
-// 	if err != nil {
-// 		return 0, fmt.Errorf("failed to read directory: %w", err)
-// 	}
-
-// 	fileCount := 0
-// 	for _, entry := range entries {
-// 		if !entry.IsDir() {
-// 			fileCount++
-// 		}
-// 	}
-// 	return fileCount, nil
-// }
-
-// countLines lê o arquivo e conta o número de quebras de linha ('\n').
-// Esta é uma maneira eficiente de contar linhas em Go, usando um buffer.
 func countLines(filePath string) (int, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -98,15 +82,12 @@ func countLines(filePath string) (int, error) {
 	}
 	defer file.Close()
 
-	// Define um buffer grande para leitura (32KB, por exemplo)
 	buf := make([]byte, 32*1024)
 	count := 0
 
 	for {
-		// Lê um bloco de bytes
 		n, err := file.Read(buf)
 
-		// Conta o número de '\n' no bloco lido
 		count += bytes.Count(buf[:n], []byte{'\n'})
 
 		if err == io.EOF {
@@ -120,15 +101,13 @@ func countLines(filePath string) (int, error) {
 	return count, nil
 }
 
-// scanAndSumLines percorre o diretório fornecido e retorna a soma total das linhas.
 func scanAndSumLines(rootDir string) (int, error) {
 	var totalLines int
 	var mu sync.Mutex
 
-	// filepath.Walk percorre recursivamente o diretório
 	err := filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			fmt.Printf("Erro ao acessar um caminho %q: %v\n", path, err)
+			shared.Log.Error("Erro ao acessar caminho", zap.String("path", path), zap.Error(err))
 			return nil
 		}
 
@@ -137,14 +116,12 @@ func scanAndSumLines(rootDir string) (int, error) {
 		}
 
 		if !strings.HasSuffix(info.Name(), ".json") {
-			return nil // Ignora arquivos que não são .json
+			return nil
 		}
 
-		// Ponto 1 & 2: Conta as linhas no arquivo
 		lines, err := countLines(path)
 		if err != nil {
-			// Loga o erro, mas continua para o próximo arquivo
-			fmt.Printf("Erro ao contar linhas em %q: %v\n", path, err)
+			shared.Log.Error("Erro ao contar linhas", zap.String("path", path), zap.Error(err))
 			return nil
 		}
 
@@ -163,10 +140,7 @@ func scanAndSumLines(rootDir string) (int, error) {
 }
 
 func roundToTwoDecimalPlaces(f float64) float64 {
-	// Multiply by 100 to shift the decimal two places to the right
 	shifted := f * 100
-	// Round to the nearest integer
 	roundedShifted := math.Round(shifted)
-	// Divide by 100 to shift the decimal back
 	return roundedShifted / 100
 }

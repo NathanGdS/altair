@@ -2,13 +2,14 @@ package workers
 
 import (
 	"bufio"
-	"fmt"
-	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/nathangds/altair/shared"
 )
@@ -30,10 +31,10 @@ func ConsumerWorker() {
 }
 
 func startConsumerLoop() {
-	fmt.Printf("[consumer] innitialized, running every %d second", shared.ConsumerRunningInterval)
+	shared.Log.Info("[consumer] innitialized, running every " + strconv.Itoa(int(shared.ConsumerRunningInterval)) + " second")
 
 	for {
-		log.Println("[INFO] Consuming messages")
+		shared.Log.Info("[INFO] Consuming messages")
 		processMessages()
 		time.Sleep(shared.ConsumerRunningInterval)
 	}
@@ -42,7 +43,7 @@ func startConsumerLoop() {
 func processMessages() {
 	files, err := os.ReadDir(ReadDir)
 	if err != nil {
-		fmt.Println("erro ao ler read/:", err)
+		shared.Log.Error("erro ao ler read/", zap.Error(err))
 		return
 	}
 
@@ -77,7 +78,7 @@ func processMessages() {
 func readMessagesFromFile(path string, msgChan chan<- message) {
 	file, err := os.Open(path)
 	if err != nil {
-		fmt.Println("[ERRO] ao abrir arquivo:", err)
+		shared.Log.Error("ao abrir arquivo", zap.Error(err))
 		return
 	}
 	defer file.Close()
@@ -108,7 +109,7 @@ func saveProcessed(line string) {
 
 	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Println("[ERRO] ao salvar processed:", err)
+		shared.Log.Error("ao salvar processed", zap.Error(err))
 		return
 	}
 	defer f.Close()
@@ -120,8 +121,8 @@ func initDirectories() {
 	dirs := []string{"messages/ready", "messages/processed", "messages/trash"}
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
-			log.Println("Error creating directory:", dir, err)
+			shared.Log.Error("Error creating directory", zap.String("dir", dir), zap.Error(err))
 		}
 	}
-	log.Println("Directories initialized successfully")
+	shared.Log.Info("Directories initialized successfully")
 }

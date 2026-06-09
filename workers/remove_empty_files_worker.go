@@ -3,44 +3,45 @@ package workers
 import (
 	"bufio"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/nathangds/altair/shared"
 )
 
 func RemoveEmptyFilesWorker(folderPath string) {
-	log.Printf("[Remove-Empty-Files] woker innitiated! (%s)", folderPath)
+	shared.Log.Info("[Remove-Empty-Files] worker initiated", zap.String("folder", folderPath))
 
 	for {
-		log.Printf("[Remove-Empty-Files] Removing empty files on folder (%s)", folderPath)
+		shared.Log.Info("[Remove-Empty-Files] Removing empty files", zap.String("folder", folderPath))
 		markToDelete(folderPath)
-		log.Println("[Remove-Empty-Files] Woker finished execution")
+		shared.Log.Info("[Remove-Empty-Files] Worker finished execution")
 		time.Sleep(shared.RemoveEmptyFilesInterval)
 	}
 }
 
 func DeleteMakedFiles() {
-	log.Println("[Delete-Marked-Files] woker innitiated!")
+	shared.Log.Info("[Delete-Marked-Files] worker initiated")
 
 	for {
 		const dir = "messages/trash"
 		files, err := os.ReadDir(dir)
 
 		if err != nil {
-			log.Fatal(err)
+			shared.Log.Fatal("error reading trash dir", zap.Error(err))
 		}
 
 		for _, f := range files {
 			err := os.RemoveAll(filepath.Join(dir, f.Name()))
 			if err != nil {
-				log.Printf("failed to remove %s: %v", f.Name(), err)
+				shared.Log.Error("failed to remove file", zap.String("file", f.Name()), zap.Error(err))
 			}
 		}
 
-		log.Println("Cleaned trash files")
+		shared.Log.Info("Cleaned trash files")
 		time.Sleep(shared.RemoveMakedFilesInterval)
 	}
 }
@@ -48,7 +49,7 @@ func DeleteMakedFiles() {
 func markToDelete(folderPath string) {
 	files, err := os.ReadDir(folderPath)
 	if err != nil {
-		log.Println("Error reading directory:", err)
+		shared.Log.Error("Error reading directory", zap.Error(err))
 		return
 	}
 
@@ -61,17 +62,17 @@ func markToDelete(folderPath string) {
 
 		linesSize, err := countLines(fullPath)
 		if err != nil {
-			log.Fatal(err)
+			shared.Log.Fatal("error counting lines", zap.Error(err))
 		}
 
 		if linesSize <= 0 {
 			err := os.Rename(fullPath, "messages/trash/"+fileName)
 
 			if err != nil {
-				log.Printf("Failed to remove file %s: %v", fullPath, err)
+				shared.Log.Error("Failed to remove file", zap.String("path", fullPath), zap.Error(err))
 			}
 
-			log.Printf("File %s removed for being empty", "messages/processed/"+fileName)
+			shared.Log.Info("File removed for being empty", zap.String("file", "messages/processed/"+fileName))
 		}
 	}
 }
@@ -81,7 +82,7 @@ func countLines(filePath string) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("failed to open file: %w", err)
 	}
-	defer file.Close() // Ensure the file is closed when the function exits
+	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
 	lineCount := 0
