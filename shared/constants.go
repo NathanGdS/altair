@@ -21,6 +21,11 @@ const (
 
 var ConsumerWorkingPool = getWorkingPool()
 
+var (
+	ConsumerHeartbeatTTL     = 30 * time.Second
+	ConsumerTTLSweepInterval = 10 * time.Second
+)
+
 func getWorkingPool() int {
 	return runtime.NumCPU() * 2
 }
