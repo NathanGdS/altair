@@ -3,6 +3,8 @@ package shared
 import (
 	"database/sql"
 	"errors"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -38,6 +40,12 @@ CREATE INDEX IF NOT EXISTS idx_consumers_origin_status ON consumers(origin, stat
 `
 
 func NewConsumerStore(dbPath string) (*ConsumerStore, error) {
+	if dir := filepath.Dir(dbPath); dir != "." {
+		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+			return nil, err
+		}
+	}
+
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, err

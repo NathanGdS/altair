@@ -8,6 +8,21 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestNewConsumerStore_CreatesParentDirectory(t *testing.T) {
+	t.Run("should create missing nested parent directories for the db file", func(t *testing.T) {
+		// Arrange
+		dbPath := filepath.Join(t.TempDir(), "nested", "subdir", "consumers.db")
+
+		// Act
+		store, err := NewConsumerStore(dbPath)
+
+		// Assert
+		assert.NoError(t, err)
+		defer store.Close()
+		assert.FileExists(t, dbPath)
+	})
+}
+
 func TestConsumerStore_RegisterAndActiveConsumersForOrigin(t *testing.T) {
 	t.Run("should register a consumer and make it visible via the cache", func(t *testing.T) {
 		// Arrange
