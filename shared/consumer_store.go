@@ -2,6 +2,7 @@ package shared
 
 import (
 	"database/sql"
+	"errors"
 	"sync"
 	"time"
 
@@ -121,6 +122,66 @@ func (s *ConsumerStore) ActiveConsumersForOrigin(origin string) []Consumer {
 
 func (s *ConsumerStore) Close() error {
 	return s.db.Close()
+}
+
+var ErrConsumerNotFound = errors.New("consumer not found or inactive")
+
+func (s *ConsumerStore) Heartbeat(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for origin, consumers := range s.cache {
+		for i, c := range consumers {
+			if c.ID == id {
+				now := time.Now().UTC()
+				if _, err := s.db.Exec(`UPDATE consumers SET last_heartbeat_at = ? WHERE id = ?`, now, id); err != nil {
+					return err
+				}
+				consumers[i].LastHeartbeatAt = now
+				s.cache[origin] = consumers
+				return nil
+			}
+		}
+	}
+
+	return ErrConsumerNotFound
+}
+
+func (s *ConsumerStore) Deactivate(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, err := s.db.Exec(`UPDATE consumers SET status = 'inactive' WHERE id = ?`, id); err != nil {
+		return err
+	}
+
+	for origin, consumers := range s.cache {
+		for i, c := range consumers {
+			if c.ID == id {
+				s.cache[origin] = append(consumers[:i], consumers[i+1:]...)
+				return nil
+			}
+		}
+	}
+
+	return nil
+}
+
+func (s *ConsumerStore) ExpiredConsumers(ttl time.Duration) []Consumer {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	cutoff := time.Now().UTC().Add(-ttl)
+	var expired []Consumer
+	for _, consumers := range s.cache {
+		for _, c := range consumers {
+			if c.LastHeartbeatAt.Before(cutoff) {
+				expired = append(expired, c)
+			}
+		}
+	}
+
+	return expired
 }
 
 // Consumers is the process-wide consumer store, set by InitConsumerStore.
