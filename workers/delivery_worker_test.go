@@ -44,13 +44,14 @@ func TestDeliverPending(t *testing.T) {
 		// Assert
 		assert.Equal(t, `{"id":"msg-1"}`, receivedBody)
 
+		// readAndTruncatePendingLines removes the pending file entirely after a successful
+		// drain (rename-then-process), rather than truncating it to zero bytes in place, so
+		// the pending directory should be empty here — not merely "every file present is
+		// empty" (which would be vacuously true if the directory were empty for a different
+		// reason too).
 		pendingFiles, err := os.ReadDir(DeliveryPendingDir)
 		assert.NoError(t, err)
-		for _, f := range pendingFiles {
-			info, statErr := os.Stat(filepath.Join(DeliveryPendingDir, f.Name()))
-			assert.NoError(t, statErr)
-			assert.Equal(t, int64(0), info.Size())
-		}
+		assert.Empty(t, pendingFiles)
 
 		failedFiles, err := os.ReadDir(DeliveryFailedDir)
 		assert.NoError(t, err)
@@ -94,6 +95,85 @@ func TestDeliverPending(t *testing.T) {
 		var failed deliveryLine
 		assert.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(string(content))), &failed))
 		assert.Equal(t, "msg-2", failed.MessageID)
+	})
+}
+
+// TestDeliverPending_RecoversOrphanedReadingFileAfterCrash is a regression test for a
+// crash-recovery data-loss path the unique-per-call reading path (readingPath :=
+// fmt.Sprintf("%s.reading.%d", path, time.Now().UnixNano())) fixes.
+//
+// Scenario: a forceful kill lands in the window after readAndTruncatePendingLines renames
+// path -> path+".reading" but before it removes that file. That orphan sits on disk with
+// unread lines. The process restarts, fresh messages accumulate at path again (via O_CREATE).
+// On the next drain, os.ReadDir returns both the fresh path and the orphan; with the old fixed
+// ".reading" suffix, the fresh file's own rename target would collide with the orphan's name,
+// and os.Rename's replace-existing semantics would silently overwrite (destroy) the orphan
+// before anything ever read it — no trace in deliveries/failed. With a unique per-call
+// timestamped suffix, the orphan is just another independent directory entry that deliverPending
+// picks up and delivers on its own, recovered late instead of lost.
+//
+// This test simulates that exact post-crash disk state directly (a fresh pending file plus a
+// manually-created orphan with the old fixed-suffix naming pattern) and asserts deliverPending
+// delivers BOTH sets of lines — nothing lost, nothing overwritten.
+func TestDeliverPending_RecoversOrphanedReadingFileAfterCrash(t *testing.T) {
+	t.Run("delivers both the fresh pending file and a crash-orphaned .reading file", func(t *testing.T) {
+		// Arrange
+		withTempWorkDir(t)
+		initDeliveryDirectories()
+
+		var mu sync.Mutex
+		receivedIDs := map[string]int{}
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// deliverOne POSTs deliveryLine.Payload as the raw body, so the payload string
+			// itself (set per-line below) is what identifies which message arrived.
+			body, _ := io.ReadAll(r.Body)
+			mu.Lock()
+			receivedIDs[string(body)]++
+			mu.Unlock()
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		path := filepath.Join(DeliveryPendingDir, "orders-2026-08-16.json")
+
+		// Fresh file: what accumulated at the original path after the process restarted.
+		assert.NoError(t, appendDeliveryLine(path, deliveryLine{
+			MessageID:  "fresh-1",
+			Origin:     "orders",
+			ConsumerID: "c1",
+			WebhookURL: server.URL,
+			Payload:    `{"id":"fresh-1"}`,
+		}))
+
+		// Orphan: simulates a prior crash that renamed path -> path+".reading" but was killed
+		// before removing it. Written directly (not via appendDeliveryLine, which would target
+		// "path", not the orphan's name) using the OLD fixed-suffix naming pattern this fix
+		// replaces, since that's exactly the on-disk artifact a pre-fix crash would leave.
+		orphanPath := path + ".reading"
+		orphanLine, err := json.Marshal(deliveryLine{
+			MessageID:  "orphan-1",
+			Origin:     "orders",
+			ConsumerID: "c1",
+			WebhookURL: server.URL,
+			Payload:    `{"id":"orphan-1"}`,
+		})
+		assert.NoError(t, err)
+		assert.NoError(t, os.WriteFile(orphanPath, append(orphanLine, '\n'), 0644))
+
+		// Act
+		deliverPending()
+
+		// Assert: both the fresh message and the orphan's message were delivered exactly once —
+		// the orphan was neither silently overwritten nor left undelivered.
+		mu.Lock()
+		defer mu.Unlock()
+		assert.Equal(t, 1, receivedIDs[`{"id":"fresh-1"}`], "fresh pending file's message should be delivered exactly once")
+		assert.Equal(t, 1, receivedIDs[`{"id":"orphan-1"}`], "crash-orphaned message should be recovered and delivered exactly once")
+		assert.Len(t, receivedIDs, 2, "no extra or missing deliveries")
+
+		failedFiles, err := os.ReadDir(DeliveryFailedDir)
+		assert.NoError(t, err)
+		assert.Empty(t, failedFiles)
 	})
 }
 

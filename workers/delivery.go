@@ -3,6 +3,7 @@ package workers
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -105,7 +106,19 @@ func enqueueDeliveries(messageID, origin, payload string, consumers []shared.Con
 }
 
 func readAndTruncatePendingLines(path string) ([]deliveryLine, error) {
-	readingPath := path + ".reading"
+	// The reading path must be unique per call, not a fixed path+".reading" suffix. A fixed
+	// suffix can collide with an orphan left behind by a prior crash: if the process is killed
+	// after this function renames path -> path+".reading" but before it removes that file, the
+	// orphan sits on disk with unread lines. On restart, fresh messages accumulate at path
+	// again, and the next drain's rename (path -> path+".reading") would silently overwrite the
+	// orphan — os.Rename uses replace-existing semantics on both POSIX and Windows — permanently
+	// losing its lines with no trace in deliveries/failed, even though the fresh file's own
+	// messages would still be delivered normally under the orphan's old name. A unique
+	// timestamped suffix can never collide with anything, including a leftover orphan, so it
+	// also makes crash orphans self-healing: os.ReadDir lists an orphan as its own independent
+	// directory entry, and deliverPending's loop picks it up and delivers its lines like any
+	// other pending file, just recovered late instead of lost.
+	readingPath := fmt.Sprintf("%s.reading.%d", path, time.Now().UnixNano())
 
 	// Hold deliveryFileMu around just the rename: appendDeliveryLine holds the same mutex for
 	// its entire OpenFile-Write-Close sequence (and closes the file before releasing the
