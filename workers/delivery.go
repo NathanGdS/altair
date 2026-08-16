@@ -89,8 +89,39 @@ func enqueueDeliveries(messageID, origin, payload string, consumers []shared.Con
 	}
 }
 
+// renameWithRetry retries os.Rename a few times with a short backoff before giving up. On
+// Windows, os.OpenFile's default share mode (FILE_SHARE_READ|FILE_SHARE_WRITE) does not
+// include FILE_SHARE_DELETE, so a rename can transiently fail with a sharing violation if it
+// races the brief window a concurrent appendDeliveryLine call has the file open. That window is
+// a single OS-level write+close and normally clears in well under a millisecond, so a handful
+// of short retries rides it out without deferring the whole file to the next DeliveryWorker
+// tick. If every attempt fails, the file is left untouched (rename is atomic — it either fully
+// renames or is a no-op), so the caller safely retries the whole file on the next tick with no
+// data loss, just added latency.
+func renameWithRetry(oldPath, newPath string) error {
+	var err error
+	for attempt := 0; attempt < 5; attempt++ {
+		if attempt > 0 {
+			time.Sleep(2 * time.Millisecond)
+		}
+		err = os.Rename(oldPath, newPath)
+		if err == nil || os.IsNotExist(err) {
+			return err
+		}
+	}
+	return err
+}
+
 func readAndTruncatePendingLines(path string) ([]deliveryLine, error) {
-	file, err := os.Open(path)
+	readingPath := path + ".reading"
+	if err := renameWithRetry(path, readingPath); err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	file, err := os.Open(readingPath)
 	if err != nil {
 		return nil, err
 	}
@@ -109,10 +140,14 @@ func readAndTruncatePendingLines(path string) ([]deliveryLine, error) {
 		}
 		lines = append(lines, line)
 	}
+	scanErr := scanner.Err()
 	file.Close()
 
-	_ = os.Truncate(path, 0)
-	return lines, scanner.Err()
+	if err := os.Remove(readingPath); err != nil {
+		shared.Log.Error("failed to remove processed delivery file", zap.String("file", readingPath), zap.Error(err))
+	}
+
+	return lines, scanErr
 }
 
 func parseOriginAndID(line string) (origin string, id string) {
