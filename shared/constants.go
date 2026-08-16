@@ -12,6 +12,13 @@ const (
 	RemoveMakedFilesInterval = 15 * time.Minute
 )
 
+const (
+	DeliveryRunningInterval = 5 * time.Second
+	DeliveryQueueCapacity   = 5000
+	DeliveryMaxRetries      = 3
+	DeliveryHTTPTimeout     = 5 * time.Second
+)
+
 var ConsumerWorkingPool = getWorkingPool()
 
 func getWorkingPool() int {
