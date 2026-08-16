@@ -14,6 +14,11 @@ go build -o bin/example-consumer ./examples/01-consumer
 echo "Ensuring runtime directories exist (avoids startup race in workers.DeleteMakedFiles)..."
 mkdir -p messages/ready messages/processed messages/trash data deliveries/pending deliveries/failed
 
+# Reset the consumer store between runs so a leftover "active" registration from a prior run
+# (e.g. cleanup killed altair before its heartbeat TTL expired) can't cause the delivery worker
+# to broadcast each message twice to the same webhook URL. Start every run from a clean store.
+rm -f data/altair.db
+
 echo "Starting altair..."
 ./bin/altair &
 server_pid=$!

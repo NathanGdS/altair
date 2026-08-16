@@ -13,8 +13,11 @@ $consumerProc = $null
 
 try {
     Write-Host "Building altair and example consumer..."
-    go build -o bin/altair ./main.go
-    go build -o bin/example-consumer ./examples/01-consumer
+    # Windows requires a recognized executable extension for Start-Process (ShellExecute) to
+    # launch a binary by path; `go build -o bin/altair` (no extension) produces a file
+    # Start-Process cannot invoke, so we build with .exe explicitly on this platform.
+    go build -o bin/altair.exe ./main.go
+    go build -o bin/example-consumer.exe ./examples/01-consumer
 
     Write-Host "Ensuring runtime directories exist (avoids startup race in workers.DeleteMakedFiles)..."
     $requiredDirs = @(
@@ -29,12 +32,21 @@ try {
         New-Item -ItemType Directory -Force -Path "$root/$dir" | Out-Null
     }
 
+    # Reset the consumer store between runs. On Windows, the cleanup below kills altair with
+    # Stop-Process -Force, which does not deliver a signal Go can catch, so the example
+    # consumer's graceful DELETE /consumers/{id} on shutdown never runs and its registration
+    # stays "active" in data/altair.db until the 30s heartbeat TTL sweep clears it. Re-running
+    # this script within that window would leave two active consumer rows for the same
+    # webhook URL, so the delivery worker broadcasts each message twice. Start every run from a
+    # clean store instead of depending on TTL timing.
+    Remove-Item -Force -ErrorAction SilentlyContinue -Path "$root/data/altair.db"
+
     Write-Host "Starting altair..."
-    $serverProc = Start-Process -FilePath "$root/bin/altair" -PassThru -WindowStyle Hidden
+    $serverProc = Start-Process -FilePath "$root/bin/altair.exe" -PassThru -WindowStyle Hidden
     Start-Sleep -Seconds 2
 
     Write-Host "Starting example consumer..."
-    $consumerProc = Start-Process -FilePath "$root/bin/example-consumer" -PassThru -WindowStyle Hidden
+    $consumerProc = Start-Process -FilePath "$root/bin/example-consumer.exe" -PassThru -WindowStyle Hidden
     Start-Sleep -Seconds 2
 
     Write-Host "Firing $requestCount requests via autocannon..."
