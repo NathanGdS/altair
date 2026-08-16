@@ -1,0 +1,8 @@
+{
+  "origin": "examples-consumer",
+  "data": {
+    "id": "1",
+    "name": "John Doe",
+    "email": "john.doe@example.com"
+  }
+}
