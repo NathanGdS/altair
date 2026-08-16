@@ -19,12 +19,24 @@ import (
 func main() {
 	defer shared.Log.Sync()
 
+	if err := shared.InitConsumerStore("data/altair.db"); err != nil {
+		shared.Log.Fatal("failed to init consumer store", zap.Error(err))
+	}
+	defer shared.Consumers.Close()
+
 	http.HandleFunc("POST /publish", handlers.PublishHandler)
+	http.HandleFunc("POST /consumers", handlers.RegisterConsumerHandler)
+	http.HandleFunc("POST /consumers/{id}/heartbeat", handlers.ConsumerHeartbeatHandler)
+	http.HandleFunc("DELETE /consumers/{id}", handlers.UnregisterConsumerHandler)
 	web.RegisterWebHandlers()
 	go workers.ConsumerWorker()
+	go workers.DeliveryWorker()
+	go workers.TTLSweeperWorker()
 	go workers.PurgeMessagesWorker()
 	go workers.RemoveEmptyFilesWorker("messages/processed")
 	go workers.RemoveEmptyFilesWorker("messages/ready")
+	go workers.RemoveEmptyFilesWorker("deliveries/pending")
+	go workers.RemoveEmptyFilesWorker("deliveries/failed")
 	go workers.DeleteMakedFiles()
 
 	shared.Log.Info("Server is running on port 8080")
