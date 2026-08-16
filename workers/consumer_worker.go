@@ -27,6 +27,7 @@ type message struct {
 
 func ConsumerWorker() {
 	initDirectories()
+	initDeliveryDirectories()
 	go startConsumerLoop()
 }
 
@@ -95,8 +96,15 @@ func readMessagesFromFile(path string, msgChan chan<- message) {
 }
 
 func processSingleMessage(msg message) {
-	// TODO: handle http delivery in future
 	saveProcessed(msg.Line)
+
+	origin, messageID := parseOriginAndID(msg.Line)
+	if origin == "" {
+		return
+	}
+
+	consumers := shared.Consumers.ActiveConsumersForOrigin(origin)
+	enqueueDeliveries(messageID, origin, msg.Line, consumers)
 }
 
 func saveProcessed(line string) {
