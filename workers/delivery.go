@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -17,6 +18,17 @@ const (
 	DeliveryPendingDir = "./deliveries/pending"
 	DeliveryFailedDir  = "./deliveries/failed"
 )
+
+// deliveryFileMu serializes every operation that touches a pending delivery file's identity:
+// appendDeliveryLine's open-append-close, and readAndTruncatePendingLines' rename. This closes
+// both the writer-vs-writer race (concurrent appendDeliveryLine calls to the same path can hit
+// a Windows sharing violation against each other) and the writer-vs-renamer race (a writer's
+// OpenFile racing the reader's rename) with a single simple primitive. One global mutex, not
+// per-path: this broker is a local single-process system, not high-concurrency-across-many-
+// origins, so the extra complexity of a per-path lock map isn't warranted. It only serializes
+// small local file appends/renames — the DeliveryWorker's HTTP POST worker pool (the actual
+// network calls, with up to 5s+ retries) is untouched and stays fully concurrent.
+var deliveryFileMu sync.Mutex
 
 type deliveryLine struct {
 	MessageID  string `json:"message_id"`
@@ -59,6 +71,9 @@ func appendDeliveryLine(path string, line deliveryLine) error {
 		return err
 	}
 
+	deliveryFileMu.Lock()
+	defer deliveryFileMu.Unlock()
+
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
@@ -89,32 +104,23 @@ func enqueueDeliveries(messageID, origin, payload string, consumers []shared.Con
 	}
 }
 
-// renameWithRetry retries os.Rename a few times with a short backoff before giving up. On
-// Windows, os.OpenFile's default share mode (FILE_SHARE_READ|FILE_SHARE_WRITE) does not
-// include FILE_SHARE_DELETE, so a rename can transiently fail with a sharing violation if it
-// races the brief window a concurrent appendDeliveryLine call has the file open. That window is
-// a single OS-level write+close and normally clears in well under a millisecond, so a handful
-// of short retries rides it out without deferring the whole file to the next DeliveryWorker
-// tick. If every attempt fails, the file is left untouched (rename is atomic — it either fully
-// renames or is a no-op), so the caller safely retries the whole file on the next tick with no
-// data loss, just added latency.
-func renameWithRetry(oldPath, newPath string) error {
-	var err error
-	for attempt := 0; attempt < 5; attempt++ {
-		if attempt > 0 {
-			time.Sleep(2 * time.Millisecond)
-		}
-		err = os.Rename(oldPath, newPath)
-		if err == nil || os.IsNotExist(err) {
-			return err
-		}
-	}
-	return err
-}
-
 func readAndTruncatePendingLines(path string) ([]deliveryLine, error) {
 	readingPath := path + ".reading"
-	if err := renameWithRetry(path, readingPath); err != nil {
+
+	// Hold deliveryFileMu around just the rename: appendDeliveryLine holds the same mutex for
+	// its entire OpenFile-Write-Close sequence (and closes the file before releasing the
+	// mutex), so by the time this goroutine acquires the lock, no writer can have the file
+	// open. That's what makes the rename provably immune to the Windows sharing-violation this
+	// used to hit — os.OpenFile's default share mode (FILE_SHARE_READ|FILE_SHARE_WRITE) omits
+	// FILE_SHARE_DELETE, so a rename against a concurrently-open handle used to fail
+	// transiently; with the mutex, that handle can no longer exist at rename time, so the
+	// earlier retry-around-the-rename workaround is no longer needed. Release the lock before
+	// opening/scanning/removing so it's held as briefly as possible.
+	deliveryFileMu.Lock()
+	err := os.Rename(path, readingPath)
+	deliveryFileMu.Unlock()
+
+	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}

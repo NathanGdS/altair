@@ -97,32 +97,36 @@ func TestDeliverPending(t *testing.T) {
 	})
 }
 
-// TestReadAndTruncatePendingLines_ConcurrentAppendsNotLost is a best-effort regression test
-// for the TOCTOU race this fix closes: readAndTruncatePendingLines used to open the pending
-// file, scan it to EOF, close it, and only then call os.Truncate(path, 0). Any line appended
-// by a concurrent writer after the scan reached EOF but before the truncate executed was
-// silently wiped.
+// TestReadAndTruncatePendingLines_ConcurrentAppendsNotLost is a regression test for two races
+// this file's fixes closed, both guarded by the same deliveryFileMu:
+//
+//  1. Writer-vs-renamer (rename-then-process fix): readAndTruncatePendingLines used to open the
+//     pending file, scan it to EOF, close it, and only then call os.Truncate(path, 0). Any line
+//     appended by a concurrent writer after the scan reached EOF but before the truncate
+//     executed was silently wiped.
+//  2. Writer-vs-writer (deliveryFileMu fix): concurrent appendDeliveryLine calls to the same
+//     path used to race each other directly — on Windows this reproducibly hit
+//     ERROR_SHARING_VIOLATION on os.OpenFile, and enqueueDeliveries drops a line on write
+//     failure with no retry, permanently losing it.
 //
 // This can't be turned into a fully deterministic unit test (it depends on exact goroutine
-// scheduling), so instead it reproduces the actual production shape of the race: DeliveryWorker
-// calls readAndTruncatePendingLines exactly once per poll tick (never in a tight loop), while a
-// writer appends to the same file concurrently. Each trial below has one writer goroutine
-// appending a batch of uniquely-identified lines (sequentially — see the note on
-// TestAppendDeliveryLine_ConcurrentWritersRaceEachOther below for why appenders are NOT run
-// concurrently with each other here) while a drain call fires concurrently with it, repeated
-// across many trials to build statistical confidence. It asserts every appended line is
-// eventually observed exactly once — none lost, none duplicated. On the pre-fix implementation
-// this test reliably reproduces loss (some IDs never appear); on the rename-then-process fix
-// the race window shrinks to a single os.Rename/os.OpenFile pair and no loss is observed.
+// scheduling), so instead it reproduces the actual production shape of both races at once:
+// DeliveryWorker calls readAndTruncatePendingLines exactly once per poll tick (never in a tight
+// loop), while up to shared.ConsumerWorkingPool goroutines from ConsumerWorker's pool can call
+// enqueueDeliveries -> appendDeliveryLine concurrently for messages sharing an origin (exactly
+// the example consumer's load-test shape: every message uses the same origin, hence the same
+// pending file). Each trial below fires a batch of concurrent appenders racing a single
+// concurrent drain call, repeated across many trials to build statistical confidence. It
+// asserts every appended line is eventually observed exactly once — none lost, none duplicated.
 func TestReadAndTruncatePendingLines_ConcurrentAppendsNotLost(t *testing.T) {
-	t.Run("no delivery line is lost when a periodic drain races a concurrent writer", func(t *testing.T) {
+	t.Run("no delivery line is lost when a periodic drain races a burst of concurrent appends", func(t *testing.T) {
 		// Arrange
 		withTempWorkDir(t)
 		initDeliveryDirectories()
 
 		path := filepath.Join(DeliveryPendingDir, "race-2026-08-16.json")
 		const trials = 200
-		const linesPerTrial = 24
+		const appendersPerTrial = 24
 
 		var mu sync.Mutex
 		seen := make(map[string]int)
@@ -136,29 +140,30 @@ func TestReadAndTruncatePendingLines_ConcurrentAppendsNotLost(t *testing.T) {
 			}
 		}
 
-		// Act: for each trial, a single writer goroutine appends a batch of lines
-		// sequentially (mirroring one enqueueDeliveries call writing several consumer
-		// fan-out lines) while a drain call races it concurrently (mirroring
-		// DeliveryWorker's one-drain-per-tick loop firing mid-write).
+		// Act: for each trial, fire a batch of concurrent appenders (mirroring
+		// enqueueDeliveries broadcasting one message to many consumers, or many pool
+		// goroutines processing same-origin messages concurrently) and race a single
+		// drain call against them (mirroring DeliveryWorker's one-drain-per-tick loop).
 		for trial := 0; trial < trials; trial++ {
-			var writerWG sync.WaitGroup
-			writerWG.Add(1)
-			go func() {
-				defer writerWG.Done()
-				for i := 0; i < linesPerTrial; i++ {
-					mu.Lock()
-					nextID++
-					msgID := strconv.Itoa(nextID)
-					mu.Unlock()
-					assert.NoError(t, appendDeliveryLine(path, deliveryLine{MessageID: msgID}))
-				}
-			}()
+			var appendWG sync.WaitGroup
+			for i := 0; i < appendersPerTrial; i++ {
+				mu.Lock()
+				nextID++
+				msgID := strconv.Itoa(nextID)
+				mu.Unlock()
+
+				appendWG.Add(1)
+				go func(id string) {
+					defer appendWG.Done()
+					assert.NoError(t, appendDeliveryLine(path, deliveryLine{MessageID: id}))
+				}(msgID)
+			}
 
 			mu.Lock()
 			drain()
 			mu.Unlock()
 
-			writerWG.Wait()
+			appendWG.Wait()
 		}
 
 		// Final drain to collect anything left over from the last trial.
