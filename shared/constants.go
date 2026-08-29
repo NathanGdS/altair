@@ -12,7 +12,19 @@ const (
 	RemoveMakedFilesInterval = 15 * time.Minute
 )
 
+const (
+	DeliveryRunningInterval = 5 * time.Second
+	DeliveryQueueCapacity   = 5000
+	DeliveryMaxRetries      = 3
+	DeliveryHTTPTimeout     = 5 * time.Second
+)
+
 var ConsumerWorkingPool = getWorkingPool()
+
+var (
+	ConsumerHeartbeatTTL     = 30 * time.Second
+	ConsumerTTLSweepInterval = 10 * time.Second
+)
 
 func getWorkingPool() int {
 	return runtime.NumCPU() * 2

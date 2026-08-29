@@ -53,14 +53,28 @@ POST /publish → fileWriterChan (buffered 200k) → append-only .json files in 
 - `messages/ready/{origin}-{YYYY-MM-DD}.json` — incoming messages, one JSON per line
 - `messages/processed/{YYYYMMDD_HH}.json` — processed messages, hourly rotation
 - `messages/trash/` — staging for empty files before deletion
+- `deliveries/pending/{origin}-{date}.json` — one line per (message, consumer) awaiting webhook delivery
+- `deliveries/failed/{origin}-{date}.json` — deliveries that exhausted retries, for manual inspection
+- `data/altair.db` — SQLite: consumer registrations (`consumers` table)
 
 **Background workers (all goroutines, started in `main.go`):**
 | Worker | Interval | Purpose |
 |--------|----------|---------|
 | `ConsumerWorker` | 5s | Reads ready files, fans out to worker pool, truncates file after reading |
+| `DeliveryWorker` | 5s | Reads `deliveries/pending/`, POSTs each line to its consumer's webhook (retry 3x, backoff 1/2/4s), renames each pending file to a unique `.reading.<id>` path before reading and removes it after processing; failures go to `deliveries/failed/` |
+| `TTLSweeperWorker` | 10s | Deactivates consumers in SQLite + cache whose last heartbeat is older than `ConsumerHeartbeatTTL` (30s) |
 | `PurgeMessagesWorker` | 15min | Removes messages older than 15min from processed files |
 | `RemoveEmptyFilesWorker` | 5min | Moves empty files (ready + processed) to trash |
 | `DeleteMakedFiles` | 15min | Deletes files in trash |
+
+**Consumer registration + delivery:**
+
+Consumers register a webhook to receive messages published to a given origin:
+- `POST /consumers` — register a consumer (`{"origin": "...", "webhook_url": "..."}`), returns `{"id": "<uuid>"}`
+- `POST /consumers/{id}/heartbeat` — keep a consumer alive; consumers must heartbeat within `ConsumerHeartbeatTTL` (30s) or `TTLSweeperWorker` deactivates them
+- `DELETE /consumers/{id}` — unregister a consumer
+
+Delivery is pub/sub broadcast: every active consumer registered for an origin gets a copy of every message published to that origin. There are no consumer groups (no competing-consumers/partitioned delivery) and no authentication on the webhook endpoints or on the delivered payload. Pending files use a unique-per-call rename-then-remove pattern for crash safety: each drain renames a `deliveries/pending/` file to a unique `.reading.<id>` path before reading it, and only removes that renamed file after its lines have been dispatched. A crash mid-flight leaves an orphaned `.reading.<id>` file on disk with unread lines; on a later tick, `os.ReadDir` lists it as its own independent entry and the same drain logic picks it up and redelivers its lines — self-healing recovery rather than silent loss. The residual risk is therefore duplication (a line already delivered before a crash interrupted removal gets redelivered on recovery), not loss — loss is now confined to whatever was only in memory/in-flight (e.g. queued in a channel) and never reached disk.
 
 **Packages:**
 - `handlers/` — HTTP handler + `Message` struct + async `fileWriterWorker`

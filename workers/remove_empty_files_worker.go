@@ -62,7 +62,11 @@ func markToDelete(folderPath string) {
 
 		linesSize, err := countLines(fullPath)
 		if err != nil {
-			shared.Log.Fatal("error counting lines", zap.Error(err))
+			// A read/count error here (e.g. a TOCTOU where the file vanished between ReadDir
+			// and os.Open) should degrade gracefully, not take down the whole process — skip
+			// this file and keep checking the rest.
+			shared.Log.Error("error counting lines", zap.String("file", fullPath), zap.Error(err))
+			continue
 		}
 
 		if linesSize <= 0 {
