@@ -15,6 +15,79 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestDeliverPending_SurvivesLineLargerThanDefaultScannerBuffer is a regression test for C1:
+// bufio.Scanner's default MaxScanTokenSize is 64KB, and a delivery line JSON-escapes the
+// whole message payload, which can push a single line past that limit for legitimate
+// /publish input well under any existing size limit. Before the fix, that produced
+// "bufio.Scanner: token too long" from scanner.Err(), and every line already parsed in that
+// file — including short, perfectly valid lines sharing the file with the oversized one —
+// was discarded by the caller with the underlying file already renamed away.
+//
+// This test builds a delivery line whose payload alone exceeds 64KB (comfortably larger
+// than bufio.Scanner's default token limit, but well within the widened buffer), appends it
+// to the same pending file as an ordinary short line, and asserts both are still delivered.
+// It would fail with "token too long" (and both messages lost) without the
+// scanner.Buffer(...) fix in readAndTruncatePendingLines.
+func TestDeliverPending_SurvivesLineLargerThanDefaultScannerBuffer(t *testing.T) {
+	t.Run("delivers both a normal line and a line whose payload exceeds the scanner's default 64KB limit", func(t *testing.T) {
+		// Arrange
+		withTempWorkDir(t)
+		initDeliveryDirectories()
+
+		var mu sync.Mutex
+		receivedBodies := map[string]int{}
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, _ := io.ReadAll(r.Body)
+			mu.Lock()
+			receivedBodies[string(body)]++
+			mu.Unlock()
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		path := filepath.Join(DeliveryPendingDir, "orders-2026-08-16.json")
+
+		// A short, ordinary line. If the oversized line below poisons the whole scan, this
+		// one gets silently discarded too, even though it's individually well-formed and
+		// tiny — that's exactly the "0 lines survive, not 1" failure mode the report
+		// verified empirically.
+		assert.NoError(t, appendDeliveryLine(path, deliveryLine{
+			MessageID:  "short-1",
+			Origin:     "orders",
+			ConsumerID: "c1",
+			WebhookURL: server.URL,
+			Payload:    `{"id":"short-1"}`,
+		}))
+
+		// A line whose marshaled JSON comfortably exceeds bufio.Scanner's default 64KB
+		// MaxScanTokenSize, but stays well inside the widened 8MB buffer.
+		largePayload := `{"id":"large-1","blob":"` + strings.Repeat("x", 100*1024) + `"}`
+		assert.Greater(t, len(largePayload), 64*1024, "payload must exceed the scanner's default token limit to exercise the fix")
+		assert.NoError(t, appendDeliveryLine(path, deliveryLine{
+			MessageID:  "large-1",
+			Origin:     "orders",
+			ConsumerID: "c1",
+			WebhookURL: server.URL,
+			Payload:    largePayload,
+		}))
+
+		// Act
+		deliverPending()
+
+		// Assert: both lines were delivered, and the pending file was fully drained with
+		// nothing left behind in deliveries/failed.
+		mu.Lock()
+		defer mu.Unlock()
+		assert.Equal(t, 1, receivedBodies[`{"id":"short-1"}`], "the short line sharing the file with the oversized one should still be delivered")
+		assert.Equal(t, 1, receivedBodies[largePayload], "the oversized line itself should still be delivered")
+		assert.Len(t, receivedBodies, 2, "no extra or missing deliveries")
+
+		failedFiles, err := os.ReadDir(DeliveryFailedDir)
+		assert.NoError(t, err)
+		assert.Empty(t, failedFiles)
+	})
+}
+
 func TestDeliverPending(t *testing.T) {
 	t.Run("delivers a pending message successfully and empties the pending file", func(t *testing.T) {
 		// Arrange

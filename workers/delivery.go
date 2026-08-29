@@ -147,6 +147,13 @@ func readAndTruncatePendingLines(path string) ([]deliveryLine, error) {
 
 	var lines []deliveryLine
 	scanner := bufio.NewScanner(file)
+	// A delivery line JSON-escapes the whole message payload, which can push a single line
+	// past bufio.Scanner's default 64KB MaxScanTokenSize even for /publish input well under
+	// any existing size limit. Without a larger buffer, scanner.Err() returns
+	// "token too long" and every line parsed so far in this file is at risk of being thrown
+	// away by the caller (see deliverPending) with the file already renamed away. Give the
+	// scanner enough headroom (8MB) that this is no longer reachable in practice.
+	scanner.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
 	for scanner.Scan() {
 		raw := strings.TrimSpace(scanner.Text())
 		if raw == "" {

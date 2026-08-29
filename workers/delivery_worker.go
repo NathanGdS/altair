@@ -57,8 +57,12 @@ func deliverPending() {
 		path := filepath.Join(DeliveryPendingDir, f.Name())
 		lines, err := readAndTruncatePendingLines(path)
 		if err != nil {
-			shared.Log.Error("failed to read pending delivery file", zap.String("file", path), zap.Error(err))
-			continue
+			// readAndTruncatePendingLines has already renamed/removed the underlying file by
+			// the time it returns an error, so the file is gone either way. Still dispatch
+			// whatever lines it managed to parse before the error (e.g. a scanner error on a
+			// later line) instead of discarding them — otherwise already-parsed, undelivered
+			// lines vanish with no record in deliveries/failed.
+			shared.Log.Error("failed to fully read pending delivery file, dispatching lines parsed so far", zap.String("file", path), zap.Error(err))
 		}
 		for _, line := range lines {
 			lineChan <- line
