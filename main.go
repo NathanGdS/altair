@@ -35,7 +35,14 @@ func main() {
 	go workers.PurgeMessagesWorker()
 	go workers.RemoveEmptyFilesWorker("messages/processed")
 	go workers.RemoveEmptyFilesWorker("messages/ready")
-	go workers.RemoveEmptyFilesWorker("deliveries/pending")
+	// deliveries/pending is intentionally NOT wired here: DeliveryWorker renames every pending
+	// file away every 5 seconds (crash-recovery rename-then-remove), so a file can vanish out
+	// from under this worker's ReadDir->countLines->os.Open sequence mid-check; combined with
+	// markToDelete's countLines error previously being fatal, that raced RemoveEmptyFilesWorker
+	// into crashing the whole broker. Pending files are also removed on drain now (not
+	// truncated), so there is nothing left for this cleanup worker to do there anyway.
+	// deliveries/failed is safe: those files are terminal/static, not raced by the delivery
+	// pipeline.
 	go workers.RemoveEmptyFilesWorker("deliveries/failed")
 	go workers.DeleteMakedFiles()
 
