@@ -27,6 +27,16 @@ func (m *Message) Instantiate() error {
 		return errors.New("Origin is required")
 	}
 
+	// Origin flows downstream into workers/delivery.go's pendingFilePath/failedFilePath,
+	// which interpolate it directly into a filesystem path. Sanitize it here, at the
+	// /publish entry point, so a path-traversal origin (e.g. "../../evil") can never reach
+	// those sinks.
+	sanitized, err := shared.SanitizeOrigin(m.Origin)
+	if err != nil {
+		return err
+	}
+	m.Origin = sanitized
+
 	m.Id = uuid.New().String()
 	m.ReceivedAt = time.Now().UTC()
 	return nil
