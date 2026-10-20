@@ -7,7 +7,7 @@ $scriptDir = $PSScriptRoot
 $root = Resolve-Path "$scriptDir/../.."
 Push-Location $root
 
-$requestCount = 500
+$requestCount = 100000
 $serverProc = $null
 $consumerProc = $null
 
