@@ -1,5 +1,5 @@
 {
-  "origin": "examples-consumer",
+  "origin": "stress-test",
   "data": {
     "id": "1",
     "name": "John Doe",

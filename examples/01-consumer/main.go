@@ -35,6 +35,10 @@ func newMux() (*http.ServeMux, *atomic.Int64) {
 	return mux, &received
 }
 
+func buildWebhookURL(host, port string) string {
+	return "http://" + net.JoinHostPort(host, port) + "/webhook"
+}
+
 func register(altairURL, origin, webhookURL string) (string, error) {
 	body, _ := json.Marshal(map[string]string{"origin": origin, "webhook_url": webhookURL})
 
@@ -91,6 +95,7 @@ func main() {
 	altairURL := flag.String("altair-url", "http://localhost:8080", "base URL of the Altair broker")
 	origin := flag.String("origin", "examples-consumer", "origin to subscribe to")
 	port := flag.String("port", "9090", "port this consumer listens on for webhook deliveries")
+	webhookHost := flag.String("webhook-host", "localhost", "host altair uses to reach this consumer (e.g. a container name)")
 	flag.Parse()
 
 	listener, err := net.Listen("tcp", ":"+*port)
@@ -107,8 +112,7 @@ func main() {
 	}()
 	shared.Log.Info("consumer listening", zap.String("port", *port))
 
-	webhookURL := "http://localhost:" + *port + "/webhook"
-	consumerID, err := register(*altairURL, *origin, webhookURL)
+	consumerID, err := register(*altairURL, *origin, buildWebhookURL(*webhookHost, *port))
 	if err != nil {
 		shared.Log.Fatal("failed to register consumer", zap.Error(err))
 	}

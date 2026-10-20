@@ -67,6 +67,34 @@ Access the following Url:
 
 ## Performance Test
 
+Performance tests run inside Docker so the broker gets a fixed resource budget and never competes with the load generator or the consumer for CPU. Only Docker (with Compose v2) is required on the host.
+
+| Service | Role | Default limits |
+|---------|------|----------------|
+| `altair` | broker under test, data on named volumes (real disk, no bind mounts) | 2 CPU / 4 GB, no swap |
+| `consumer` | `examples/01-consumer` webhook receiver | 1 CPU / 512 MB |
+| `loader` | `autocannon` load generator | 2 CPU / 1 GB |
+
+```bash
+# Raw load against /publish (prints autocannon result + docker stats)
+./perf/load.sh                 # or: make perf-load / .\perf\load.ps1
+
+# End-to-end delivery validation (publish -> consumer webhook)
+./perf/validate.sh smoke       # 500 requests, exact count     (make perf-validate)
+./perf/validate.sh heavy       # duration-based heavy load      (make perf-validate-heavy)
+.\perf\validate.ps1 -Mode heavy
+```
+
+Tunables (env vars): `ALTAIR_CPUS`, `ALTAIR_MEM`, `CONSUMER_CPUS`, `CONSUMER_MEM`, `LOADER_CPUS`, `LOADER_MEM`, `CONNECTIONS`, `DURATION`, `PIPELINING`, `REQUEST` (`smoke`|`heavy`, `load` only) and `KEEP=1` to leave the stack up after the run. Every run starts from fresh volumes.
+
+Runs leave nothing behind: on exit (including failures and Ctrl+C) the scripts remove the stack's containers, network, volumes and images, plus a dedicated `altair-perf` buildx builder that holds all build cache and base images — so other projects' images and build cache are never touched. After `KEEP=1` or a killed run, `./perf/cleanup.sh` (`make perf-cleanup` / `.\perf\cleanup.ps1`) removes everything.
+
+```bash
+ALTAIR_CPUS=1 ALTAIR_MEM=1g DURATION=30 PIPELINING=20 ./perf/validate.sh heavy
+```
+
+### Reference run (bare metal, before the Docker setup)
+
 Running 30s test @ http://localhost:8080/publish
 20 connections with 20 pipelining factor
 

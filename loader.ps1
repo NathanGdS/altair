@@ -1,1 +1,0 @@
-npx autocannon -c 20 -d 30 -p 20 -m POST -H "Content-Type: application/json" -i request-loader.json http://localhost:8080/publish

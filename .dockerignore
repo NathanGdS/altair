@@ -1,0 +1,11 @@
+.git
+.cursor
+.claude
+bin
+data
+deliveries
+messages
+docs
+specs
+perf
+**/*.exe

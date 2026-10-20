@@ -1,0 +1,76 @@
+# Isolated performance environment: each service gets its own CPU/memory budget so the load
+# generator and the webhook consumer never steal cycles from the broker under test.
+name: altair-perf
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "3"
+
+services:
+  altair:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: altair:perf
+    cpus: ${ALTAIR_CPUS:-2}
+    mem_limit: ${ALTAIR_MEM:-4g}
+    # Same as mem_limit: no swap, an OOM is a real result rather than a silent slowdown.
+    memswap_limit: ${ALTAIR_MEM:-4g}
+    ulimits:
+      nofile: { soft: 65536, hard: 65536 }
+    # Named volumes live on the Docker engine's own filesystem (not a host bind mount), so
+    # append-only writes hit a real disk with the same fsync/page-cache behavior as a server.
+    volumes:
+      - messages:/app/messages
+      - deliveries:/app/deliveries
+      - data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+    logging: *logging
+
+  consumer:
+    build:
+      context: ..
+      dockerfile: examples/01-consumer/Dockerfile
+    image: altair-example-consumer:perf
+    command:
+      - -altair-url=http://altair:8080
+      - -webhook-host=consumer
+      - -origin=stress-test
+    # Healthy only once it is serving webhooks; registration with altair follows immediately.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:9090/stats"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+    cpus: ${CONSUMER_CPUS:-1}
+    mem_limit: ${CONSUMER_MEM:-512m}
+    depends_on:
+      altair:
+        condition: service_healthy
+    logging: *logging
+
+  loader:
+    build:
+      context: loader
+    image: altair-loader:perf
+    profiles: ["load"]
+    cpus: ${LOADER_CPUS:-2}
+    mem_limit: ${LOADER_MEM:-1g}
+    volumes:
+      - ./request-smoke.json:/requests/request-smoke.json:ro
+      - ./request-heavy.json:/requests/request-heavy.json:ro
+    depends_on:
+      altair:
+        condition: service_healthy
+    logging: *logging
+
+volumes:
+  messages:
+  deliveries:
+  data:
