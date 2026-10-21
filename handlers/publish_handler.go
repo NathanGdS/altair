@@ -54,6 +54,12 @@ func init() {
 	go fileWriterWorker()
 }
 
+// WriterQueueDepth reports how many messages are buffered waiting to be written to disk,
+// and the buffer capacity.
+func WriterQueueDepth() (length, capacity int) {
+	return len(fileWriterChan), cap(fileWriterChan)
+}
+
 func fileWriterWorker() {
 	for pkt := range fileWriterChan {
 		writeToFile(pkt.Message, pkt.Origin)
@@ -112,6 +118,7 @@ func PublishHandler(w http.ResponseWriter, r *http.Request) {
 		Message: jsonBytes,
 		Origin:  message.Origin,
 	}
+	shared.PublishedTotal.Add(1)
 
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsonBytes)

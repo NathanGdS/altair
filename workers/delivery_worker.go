@@ -93,6 +93,7 @@ func deliverOne(line deliveryLine) {
 		if err == nil {
 			resp.Body.Close()
 			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				shared.DeliveredTotal.Add(1)
 				return
 			}
 			line.LastError = "unexpected status code: " + resp.Status
@@ -107,6 +108,7 @@ func deliverOne(line deliveryLine) {
 		zap.String("last_error", line.LastError),
 	)
 
+	shared.DeliveryFailedTotal.Add(1)
 	line.FailedAt = time.Now().UTC().Format(time.RFC3339)
 	if err := appendDeliveryLine(failedFilePath(line.Origin), line); err != nil {
 		shared.Log.Error("failed to write failed delivery record", zap.Error(err))
