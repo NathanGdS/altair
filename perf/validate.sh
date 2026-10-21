@@ -74,8 +74,11 @@ run_round() {
   local last_progress=$SECONDS last_log=$SECONDS
   while true; do
     sleep 2
-    received=$(consumer_received)
-    received="${received:-0}"
+    # A failed probe (the stats call can time out under load) keeps the last good reading, so it
+    # neither counts as progress nor drops the final total to 0.
+    local probe
+    probe=$(consumer_received)
+    [ -z "$probe" ] || received=$probe
 
     if [ "$received" -ne "$last_received" ]; then
       last_received=$received

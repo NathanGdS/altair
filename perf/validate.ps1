@@ -63,8 +63,10 @@ function Invoke-Round([hashtable]$state, [int]$round) {
     $lastLog = Get-Date
     while ($true) {
         Start-Sleep -Seconds 2
-        $received = Get-ConsumerReceived
-        if ($null -eq $received) { $received = 0 }
+        # A failed probe (the stats call can time out under load) keeps the last good reading, so
+        # it neither counts as progress nor drops the final total to 0.
+        $probe = Get-ConsumerReceived
+        if ($null -ne $probe) { $received = $probe }
 
         if ($received -ne $lastReceived) {
             $lastReceived = $received
