@@ -1,49 +1,151 @@
 {{define "StatusReport"}}
-<div id="current-process-display" hx-get="/status-report" hx-trigger="from:body, every 1s" class="container">
-    <section class="hero is-link is-small">
-        <div class="hero-body">
-            <p class="title">Altair</p>
-            <p class="subtitle">Message Broker</p>
+<div class="report" style="--phase: -{{.Phase}}s">
+
+    <dl class="runtime">
+        <div><dt>Uptime</dt><dd>{{duration .Uptime}}</dd></div>
+        <div><dt>Goroutines</dt><dd>{{count .Goroutines}}</dd></div>
+        <div><dt>Heap</dt><dd>{{bytes .HeapBytes}}</dd></div>
+        <div><dt>CPUs</dt><dd>{{.MaxProcs}}</dd></div>
+        <div><dt>Worker pool</dt><dd>{{.PoolSize}}</dd></div>
+    </dl>
+
+    <section class="sky" aria-labelledby="flow-title">
+        <div class="sky-head">
+            <h1 id="flow-title">Message flow</h1>
+            <p class="sky-rates" title="Averaged over the last {{.RateWindow}} seconds">
+                <span><strong>{{rate .PublishRate}}</strong> published/s</span>
+                <span><strong>{{rate .ProcessRate}}</strong> processed/s</span>
+                <span><strong>{{rate .DeliverRate}}</strong> delivered/s</span>
+            </p>
         </div>
+
+        <svg class="constellation" viewBox="0 0 1000 260" role="img"
+             aria-label="Pipeline from published messages to delivered webhooks">
+            {{range .Links}}
+            <line class="link" x1="{{.X1}}" y1="{{.Y1}}" x2="{{.X2}}" y2="{{.Y2}}" />
+            {{if .Active}}<line class="link-flow" x1="{{.X1}}" y1="{{.Y1}}" x2="{{.X2}}" y2="{{.Y2}}" />{{end}}
+            {{end}}
+            {{range .Stages}}
+            <g class="star{{if .Backlog}} is-backlog{{end}}{{if .Failed}} is-failed{{end}}">
+                <circle class="star-halo" cx="{{.X}}" cy="{{.Y}}" r="{{.R}}" />
+                <circle class="star-core" cx="{{.X}}" cy="{{.Y}}" r="{{.R}}" />
+                <text class="star-value" x="{{.X}}" y="{{.LabelY}}">
+                    <tspan x="{{.X}}">{{.Value}}</tspan>
+                    <tspan class="star-label" x="{{.X}}" dy="20">{{.Label}}</tspan>
+                    <tspan class="star-note" x="{{.X}}" dy="17">{{.Note}}</tspan>
+                </text>
+            </g>
+            {{end}}
+        </svg>
+
+        <ol class="stage-list">
+            {{range .Stages}}
+            <li class="{{if .Backlog}}is-backlog{{end}}{{if .Failed}} is-failed{{end}}">
+                <span class="stage-name">{{.Label}}</span>
+                <span class="stage-value">{{.Value}}</span>
+                <span class="stage-note">{{.Note}}</span>
+            </li>
+            {{end}}
+        </ol>
     </section>
-    <nav class="level">
-        <div class="level-item has-text-centered">
-            <div>
-                <p class="heading">Pending Messages</p>
-                <p class="title">{{.PendingMessages}}</p>
-            </div>
-        </div>
-        <div class="level-item has-text-centered">
-            <div>
-                <p class="heading">Delivered Messages</p>
-                <p class="title">{{.ProcessedMessages}}</p>
-            </div>
-        </div>
-        <div class="level-item has-text-centered">
-            <div>
-                <p class="heading">Purging Interval</p>
-                <p class="title">{{.PurgingInterval}} minutes</p>
-            </div>
-        </div>
-    </nav>
 
-    <div class="columns is-mobile is-centered">
-        <div class="column has-text-centered">
-            <h2 class="title is-4">Delivery Rate</h2>
-        </div>
-    </div>
+    <section class="gauges">
+        <article class="panel">
+            <h2>Published per second</h2>
+            <p class="gauge-number">{{rate .PublishRate}}</p>
+            <svg class="spark" viewBox="0 0 240 56" preserveAspectRatio="none" aria-hidden="true">
+                <polygon class="spark-area" points="{{sparkarea .PublishHistory 240 56}}" />
+                <polyline class="spark-line" points="{{sparkline .PublishHistory 240 56}}" />
+            </svg>
+            <p class="panel-foot">Average of the last {{.RateWindow}} s. Peak {{rate (peak .PublishHistory)}}/s in the last minute.</p>
+        </article>
 
-    <div class="columns is-vcentered">
-        <div class="column is-four-fifths">
-            <progress class="progress is-primary" value="{{.DeliveryProgress}}" max="100">
-                {{.DeliveryProgress}}%
-            </progress>
-        </div>
-        <div class="column">
-            <span class="tag is-primary"> {{.DeliveryProgress}}% </span>
-        </div>
-    </div>
+        <article class="panel">
+            <h2>Delivered per second</h2>
+            <p class="gauge-number">{{rate .DeliverRate}}</p>
+            <svg class="spark spark-deliver" viewBox="0 0 240 56" preserveAspectRatio="none" aria-hidden="true">
+                <polygon class="spark-area" points="{{sparkarea .DeliverHistory 240 56}}" />
+                <polyline class="spark-line" points="{{sparkline .DeliverHistory 240 56}}" />
+            </svg>
+            <p class="panel-foot">Average of the last {{.RateWindow}} s. Peak {{rate (peak .DeliverHistory)}}/s in the last minute.</p>
+        </article>
 
+        <article class="panel">
+            <h2>Write buffer</h2>
+            <p class="gauge-number">{{count .QueueLen}}<small> / {{count .QueueCap}}</small></p>
+            <div class="meter" role="meter" aria-valuemin="0" aria-valuemax="{{.QueueCap}}" aria-valuenow="{{.QueueLen}}" aria-label="Write buffer usage">
+                <span style="width: {{fill .QueueLen .QueueCap}}%"></span>
+            </div>
+            <p class="panel-foot">Messages accepted but not yet on disk</p>
+        </article>
+
+        <article class="panel{{if .FailedLines}} is-failed{{end}}">
+            <h2>Failed deliveries</h2>
+            <p class="gauge-number">{{count .FailedLines}}</p>
+            {{if .FailedLines}}
+            <p class="panel-foot">Gave up after every retry. Each one is kept in <code>deliveries/failed/</code> for inspection.</p>
+            {{else}}
+            <p class="panel-foot">Every webhook call has succeeded so far.</p>
+            {{end}}
+        </article>
+    </section>
+
+    <section class="tables">
+        <article class="panel">
+            <h2>Origins <span class="count">{{len .Origins}}</span></h2>
+            {{if .Origins}}
+            <table>
+                <thead><tr><th scope="col">Origin</th><th scope="col" class="num">Waiting</th><th scope="col" class="num">Consumers</th></tr></thead>
+                <tbody>
+                    {{range .Origins}}
+                    <tr>
+                        <td data-label="Origin">{{.Name}}</td>
+                        <td class="num" data-label="Waiting">{{count .Ready}}</td>
+                        <td class="num{{if not .Consumers}} is-muted{{end}}" data-label="Consumers">{{if .Consumers}}{{.Consumers}}{{else}}none{{end}}</td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+            {{else}}
+            <p class="empty">No origins yet. Send a message to <code>POST /publish</code> with an <code>origin</code> and it shows up here.</p>
+            {{end}}
+        </article>
+
+        <article class="panel">
+            <h2>Consumers <span class="count">{{len .Consumers}}</span></h2>
+            {{if .Consumers}}
+            <table>
+                <thead><tr><th scope="col">Consumer</th><th scope="col">Origin</th><th scope="col">Webhook</th><th scope="col">Last heartbeat</th></tr></thead>
+                <tbody>
+                    {{range .Consumers}}
+                    <tr>
+                        <td title="{{.ID}}" data-label="Consumer">{{shortID .ID}}</td>
+                        <td data-label="Origin">{{.Origin}}</td>
+                        <td class="webhook" title="{{.WebhookURL}}" data-label="Webhook">{{.WebhookURL}}</td>
+                        <td data-label="Last heartbeat">
+                            <div class="heartbeat{{if ge .HeartbeatUsed 0.85}} is-late{{else if ge .HeartbeatUsed 0.5}} is-slow{{end}}">
+                                <span class="heartbeat-age">{{duration .HeartbeatAge}} ago</span>
+                                <span class="heartbeat-bar" aria-hidden="true"><span style="width: {{percent .HeartbeatUsed}}%"></span></span>
+                            </div>
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+            <p class="panel-foot">Consumers that miss heartbeats for {{interval .HeartbeatTTL}} are dropped.</p>
+            {{else}}
+            <p class="empty">No consumers registered. Register a webhook with <code>POST /consumers</code> to start receiving messages.</p>
+            {{end}}
+        </article>
+    </section>
+
+    <section class="panel workers">
+        <h2>Background workers</h2>
+        <ul>
+            {{range .Workers}}
+            <li><span class="worker-every">every {{interval .Every}}</span><span class="worker-name">{{.Name}}</span><span class="worker-job">{{.Job}}</span></li>
+            {{end}}
+        </ul>
+    </section>
 </div>
-
 {{end}}
