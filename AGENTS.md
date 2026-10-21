@@ -23,11 +23,11 @@ go test ./handlers/ -run TestPublishHandler
 go build ./...
 
 # Performance tests (Docker, resource-limited: altair 2 CPU / 4 GB)
-make perf-load              # ./perf/load.sh   — raw autocannon load at /publish
+make perf-load              # ./perf/load.sh   — autocannon load at /publish, EXAMPLE consumer registered (no verdict)
 make perf-validate          # ./perf/validate.sh smoke — 500 publishes against EXAMPLE (default 01-consumer)
 make perf-validate-heavy    # ./perf/validate.sh heavy — duration-based load
 make perf-validate EXAMPLE=all   # every examples/*/ with a Dockerfile, then a PASS/FAIL summary
-make perf-load-interactive       # INTERACTIVE=1: UI on 127.0.0.1:8080, Enter = new round, q = finish
+make perf-load-interactive       # INTERACTIVE=1: UI on 127.0.0.1:8080, consumer /stats on 127.0.0.1:9090, Enter = new round, q = finish
 make perf-validate-interactive   # same for validate; consumer /stats on 127.0.0.1:9090
 make perf-cleanup           # remove every Docker resource the perf scripts created
 ```
