@@ -13,7 +13,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 source ./lib.sh
 
 connections="${CONNECTIONS:-20}"
-duration="${DURATION:-5}"
+duration="${DURATION:-60}"
 pipelining="${PIPELINING:-5}"
 request="${REQUEST:-heavy}"
 interactive="${INTERACTIVE:-0}"

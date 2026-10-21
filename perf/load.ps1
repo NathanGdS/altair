@@ -15,7 +15,7 @@ $ErrorActionPreference = "Stop"
 $PerfInteractive = [bool]$Interactive
 
 $connections = Get-EnvOrDefault "CONNECTIONS" "20"
-$duration = Get-EnvOrDefault "DURATION" "5"
+$duration = Get-EnvOrDefault "DURATION" "60"
 $pipelining = Get-EnvOrDefault "PIPELINING" "5"
 $request = Get-EnvOrDefault "REQUEST" "heavy"
 if (@("smoke", "heavy") -notcontains $request) { throw "REQUEST must be smoke|heavy, got '$request'" }
