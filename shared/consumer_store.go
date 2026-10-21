@@ -128,6 +128,18 @@ func (s *ConsumerStore) ActiveConsumersForOrigin(origin string) []Consumer {
 	return out
 }
 
+// ActiveConsumers returns a copy of every active consumer across all origins.
+func (s *ConsumerStore) ActiveConsumers() []Consumer {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var out []Consumer
+	for _, consumers := range s.cache {
+		out = append(out, consumers...)
+	}
+	return out
+}
+
 func (s *ConsumerStore) Close() error {
 	return s.db.Close()
 }
