@@ -33,21 +33,17 @@ services:
       retries: 15
     logging: *logging
 
+  # Any example under examples/<EXAMPLE>/ that follows the contract in examples/README.md.
+  # No healthcheck here on purpose: the scripts probe GET /stats from the altair container, so
+  # an example image does not need wget/curl or any other tooling of its own.
   consumer:
     build:
       context: ..
-      dockerfile: examples/01-consumer/Dockerfile
-    image: altair-example-consumer:perf
-    command:
-      - -altair-url=http://altair:8080
-      - -webhook-host=consumer
-      - -origin=stress-test
-    # Healthy only once it is serving webhooks; registration with altair follows immediately.
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:9090/stats"]
-      interval: 2s
-      timeout: 2s
-      retries: 15
+      dockerfile: examples/${EXAMPLE:-01-consumer}/Dockerfile
+    image: altair-example-${EXAMPLE:-01-consumer}:perf
+    command: >-
+      -altair-url=http://altair:8080 -webhook-host=consumer -port=9090
+      -origin=${ORIGIN:-stress-test} ${CONSUMER_ARGS:-}
     cpus: ${CONSUMER_CPUS:-1}
     mem_limit: ${CONSUMER_MEM:-512m}
     depends_on:
@@ -62,9 +58,9 @@ services:
     profiles: ["load"]
     cpus: ${LOADER_CPUS:-2}
     mem_limit: ${LOADER_MEM:-1g}
+    # Payloads rendered by the scripts from perf/request-*.json with ORIGIN filled in.
     volumes:
-      - ./request-smoke.json:/requests/request-smoke.json:ro
-      - ./request-heavy.json:/requests/request-heavy.json:ro
+      - ./.run:/requests:ro
     depends_on:
       altair:
         condition: service_healthy

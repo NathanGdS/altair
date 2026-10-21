@@ -1,3 +1,5 @@
+EXAMPLE ?= 01-consumer
+
 run:
 	@go run ./main.go 
 
@@ -17,10 +19,10 @@ perf-load:
 	@bash ./perf/load.sh
 
 perf-validate:
-	@bash ./perf/validate.sh smoke
+	@bash ./perf/validate.sh smoke $(EXAMPLE)
 
 perf-validate-heavy:
-	@bash ./perf/validate.sh heavy
+	@bash ./perf/validate.sh heavy $(EXAMPLE)
 
 perf-cleanup:
 	@bash ./perf/cleanup.sh

@@ -72,20 +72,24 @@ Performance tests run inside Docker so the broker gets a fixed resource budget a
 | Service | Role | Default limits |
 |---------|------|----------------|
 | `altair` | broker under test, data on named volumes (real disk, no bind mounts) | 2 CPU / 4 GB, no swap |
-| `consumer` | `examples/01-consumer` webhook receiver | 1 CPU / 512 MB |
+| `consumer` | any `examples/<name>` webhook receiver (default `01-consumer`) | 1 CPU / 512 MB, per-example via `perf.env` |
 | `loader` | `autocannon` load generator | 2 CPU / 1 GB |
 
 ```bash
 # Raw load against /publish (prints autocannon result + docker stats)
-./perf/load.sh                 # or: make perf-load / .\perf\load.ps1
+./perf/load.sh                       # or: make perf-load / .\perf\load.ps1
 
 # End-to-end delivery validation (publish -> consumer webhook)
-./perf/validate.sh smoke       # 500 requests, exact count     (make perf-validate)
-./perf/validate.sh heavy       # duration-based heavy load      (make perf-validate-heavy)
-.\perf\validate.ps1 -Mode heavy
+./perf/validate.sh smoke             # 500 requests, 01-consumer        (make perf-validate)
+./perf/validate.sh heavy             # duration-based heavy load        (make perf-validate-heavy)
+./perf/validate.sh heavy 02-foo      # a specific example               (make perf-validate EXAMPLE=02-foo)
+./perf/validate.sh smoke all         # every example, then a summary    (make perf-validate EXAMPLE=all)
+.\perf\validate.ps1 -Mode heavy -Example all
 ```
 
-Tunables (env vars): `ALTAIR_CPUS`, `ALTAIR_MEM`, `CONSUMER_CPUS`, `CONSUMER_MEM`, `LOADER_CPUS`, `LOADER_MEM`, `CONNECTIONS`, `DURATION`, `PIPELINING`, `REQUEST` (`smoke`|`heavy`, `load` only) and `KEEP=1` to leave the stack up after the run. Every run starts from fresh volumes.
+Which examples can be validated and what counts as PASS for each (`perf.env`: origin, exact vs at-least delivery, expected `deliveries/failed`, drain timeout, limits) is defined by the contract in [examples/README.md](examples/README.md).
+
+Tunables (env vars): `ALTAIR_CPUS`, `ALTAIR_MEM`, `LOADER_CPUS`, `LOADER_MEM`, `CONNECTIONS`, `DURATION`, `PIPELINING`, `REQUEST` (`smoke`|`heavy`, `load` only), any `perf.env` key (overrides the example's file) and `KEEP=1` to leave the stack up after the run (single example only). Every run starts from fresh volumes.
 
 Runs leave nothing behind: on exit (including failures and Ctrl+C) the scripts remove the stack's containers, network, volumes and images, plus a dedicated `altair-perf` buildx builder that holds all build cache and base images — so other projects' images and build cache are never touched. After `KEEP=1` or a killed run, `./perf/cleanup.sh` (`make perf-cleanup` / `.\perf\cleanup.ps1`) removes everything.
 

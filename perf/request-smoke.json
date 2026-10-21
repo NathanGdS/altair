@@ -1,5 +1,5 @@
 {
-  "origin": "stress-test",
+  "origin": "{{ORIGIN}}",
   "data": {
     "id": "1",
     "name": "John Doe",
