@@ -13,6 +13,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/nathangds/altair/shared"
 )
 
 // TestDeliverPending_SurvivesLineLargerThanDefaultScannerBuffer is a regression test for C1:
@@ -110,12 +112,14 @@ func TestDeliverPending(t *testing.T) {
 			WebhookURL: server.URL,
 			Payload:    `{"id":"msg-1"}`,
 		}))
+		deliveredBefore := shared.DeliveredTotal.Load()
 
 		// Act
 		deliverPending()
 
 		// Assert
 		assert.Equal(t, `{"id":"msg-1"}`, receivedBody)
+		assert.Equal(t, deliveredBefore+1, shared.DeliveredTotal.Load())
 
 		// readAndTruncatePendingLines removes the pending file entirely after a successful
 		// drain (rename-then-process), rather than truncating it to zero bytes in place, so
@@ -151,12 +155,14 @@ func TestDeliverPending(t *testing.T) {
 			WebhookURL: server.URL,
 			Payload:    `{"id":"msg-2"}`,
 		}))
+		failedBefore := shared.DeliveryFailedTotal.Load()
 
 		// Act
 		deliverPending()
 
 		// Assert
 		assert.Equal(t, 3, attempts)
+		assert.Equal(t, failedBefore+1, shared.DeliveryFailedTotal.Load())
 
 		failedFiles, err := os.ReadDir(DeliveryFailedDir)
 		assert.NoError(t, err)

@@ -140,3 +140,42 @@ func TestConsumerStore_HeartbeatDeactivateExpired(t *testing.T) {
 		_ = fresh
 	})
 }
+
+func TestConsumerStore_ActiveConsumers(t *testing.T) {
+	t.Run("should return active consumers across every origin, excluding deactivated ones", func(t *testing.T) {
+		// Arrange
+		store, err := NewConsumerStore(filepath.Join(t.TempDir(), "consumers.db"))
+		assert.NoError(t, err)
+		defer store.Close()
+
+		orders, err := store.Register("orders", "https://example.com/orders")
+		assert.NoError(t, err)
+		_, err = store.Register("payments", "https://example.com/payments")
+		assert.NoError(t, err)
+		gone, err := store.Register("payments", "https://example.com/gone")
+		assert.NoError(t, err)
+		assert.NoError(t, store.Deactivate(gone.ID))
+
+		// Act
+		active := store.ActiveConsumers()
+
+		// Assert
+		assert.Len(t, active, 2)
+		ids := []string{active[0].ID, active[1].ID}
+		assert.Contains(t, ids, orders.ID)
+		assert.NotContains(t, ids, gone.ID)
+	})
+
+	t.Run("should return an empty slice when no consumer is registered", func(t *testing.T) {
+		// Arrange
+		store, err := NewConsumerStore(filepath.Join(t.TempDir(), "consumers.db"))
+		assert.NoError(t, err)
+		defer store.Close()
+
+		// Act
+		active := store.ActiveConsumers()
+
+		// Assert
+		assert.Empty(t, active)
+	})
+}

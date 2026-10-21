@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/nathangds/altair/shared"
 )
 
 func TestPublishHandler(t *testing.T) {
@@ -73,5 +75,48 @@ func TestPublishHandler_OriginValidation(t *testing.T) {
 
 		// Assert
 		assert.Equal(t, http.StatusBadRequest, response.Code)
+	})
+}
+
+func TestPublishHandler_Metrics(t *testing.T) {
+	t.Run("increments the published counter on an accepted message", func(t *testing.T) {
+		// Arrange
+		request, err := http.NewRequest(http.MethodPost, "/publish", bytes.NewBufferString(`{"origin": "orders", "data": {}}`))
+		assert.NoError(t, err)
+		response := httptest.NewRecorder()
+		before := shared.PublishedTotal.Load()
+
+		// Act
+		PublishHandler(response, request)
+
+		// Assert
+		assert.Equal(t, http.StatusOK, response.Code)
+		assert.Equal(t, before+1, shared.PublishedTotal.Load())
+	})
+
+	t.Run("does not count a rejected message", func(t *testing.T) {
+		// Arrange
+		request, err := http.NewRequest(http.MethodPost, "/publish", bytes.NewBufferString(`{"origin": "../evil", "data": {}}`))
+		assert.NoError(t, err)
+		response := httptest.NewRecorder()
+		before := shared.PublishedTotal.Load()
+
+		// Act
+		PublishHandler(response, request)
+
+		// Assert
+		assert.Equal(t, http.StatusBadRequest, response.Code)
+		assert.Equal(t, before, shared.PublishedTotal.Load())
+	})
+}
+
+func TestWriterQueueDepth(t *testing.T) {
+	t.Run("reports the writer buffer capacity", func(t *testing.T) {
+		// Act
+		length, capacity := WriterQueueDepth()
+
+		// Assert
+		assert.Equal(t, 200000, capacity)
+		assert.GreaterOrEqual(t, length, 0)
 	})
 }

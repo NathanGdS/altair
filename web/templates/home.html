@@ -3,14 +3,55 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://unpkg.com/htmx.org"></script>
-    <link
-        rel="stylesheet"
-        href="https://cdn.jsdelivr.net/npm/bulma@1.0.4/css/bulma.min.css"
-    >
     <title>Altair</title>
+    <link rel="icon" href="/static/altair.svg" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Instrument+Sans:wght@400;500;600&display=swap">
+    <link rel="stylesheet" href="/static/altair.css">
+    <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" defer></script>
 </head>
 <body>
-    {{template "StatusReport"}}
+    <header class="masthead">
+        <a class="brand" href="/">
+            <svg class="brand-mark" viewBox="0 0 64 32" aria-hidden="true">
+                <line x1="8" y1="24" x2="56" y2="8" />
+                <circle cx="8" cy="24" r="2.6" />
+                <circle class="brand-altair" cx="32" cy="16" r="5" />
+                <circle cx="56" cy="8" r="2.2" />
+            </svg>
+            <span class="brand-name">Altair</span>
+            <span class="brand-tag">message broker</span>
+        </a>
+        <p class="pulse" id="pulse" role="status" aria-live="polite">
+            <span class="pulse-dot" aria-hidden="true"></span>
+            <span class="pulse-text">Live, updates every second</span>
+        </p>
+    </header>
+
+    <main id="report"
+          hx-get="/status-report"
+          hx-trigger="every 1s [document.visibilityState === 'visible']"
+          hx-swap="innerHTML">
+        {{template "StatusReport" .}}
+    </main>
+
+    <script>
+        (function () {
+            var pulse = document.getElementById("pulse");
+            var text = pulse.querySelector(".pulse-text");
+            function live() {
+                pulse.classList.remove("is-stale");
+                text.textContent = "Live, updates every second";
+            }
+            function stale() {
+                pulse.classList.add("is-stale");
+                text.textContent = "Broker unreachable. Showing the last update.";
+            }
+            document.body.addEventListener("htmx:afterSwap", live);
+            document.body.addEventListener("htmx:sendError", stale);
+            document.body.addEventListener("htmx:responseError", stale);
+        })();
+    </script>
 </body>
 </html>
