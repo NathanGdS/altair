@@ -25,7 +25,7 @@ An example `examples/<name>/` must:
 
    Extra flags come from `CONSUMER_ARGS`.
 4. **Register on startup** with `POST /consumers`, heartbeat within `ConsumerHeartbeatTTL`, and receive deliveries on `POST /webhook`.
-5. **Expose `GET /stats`** on the same port, returning `{"received": <deliveries received so far>}`.
+5. **Expose `GET /stats`** on the same port, returning `{"received": <deliveries received so far>}`. It must only answer once registration succeeded: the scripts fire the load as soon as `/stats` answers.
 
 The image needs no tooling of its own (no `wget`/`curl`): the scripts probe `/stats` from the altair container over the stack network.
 

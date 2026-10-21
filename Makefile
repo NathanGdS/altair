@@ -1,4 +1,6 @@
 EXAMPLE ?= 01-consumer
+# perf/load.* read the consumer example from the environment.
+export EXAMPLE
 
 run:
 	@go run ./main.go 

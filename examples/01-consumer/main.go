@@ -103,6 +103,14 @@ func main() {
 		shared.Log.Fatal("failed to bind port", zap.Error(err))
 	}
 
+	// Register before serving: the perf scripts treat a /stats answer as "webhook registered", so
+	// /stats must not answer earlier. The port is already bound, so early deliveries just queue.
+	consumerID, err := register(*altairURL, *origin, buildWebhookURL(*webhookHost, *port))
+	if err != nil {
+		shared.Log.Fatal("failed to register consumer", zap.Error(err))
+	}
+	shared.Log.Info("registered consumer", zap.String("id", consumerID), zap.String("origin", *origin))
+
 	mux, _ := newMux()
 	server := &http.Server{Handler: mux}
 	go func() {
@@ -111,12 +119,6 @@ func main() {
 		}
 	}()
 	shared.Log.Info("consumer listening", zap.String("port", *port))
-
-	consumerID, err := register(*altairURL, *origin, buildWebhookURL(*webhookHost, *port))
-	if err != nil {
-		shared.Log.Fatal("failed to register consumer", zap.Error(err))
-	}
-	shared.Log.Info("registered consumer", zap.String("id", consumerID), zap.String("origin", *origin))
 
 	heartbeatCtx, stopHeartbeat := context.WithCancel(context.Background())
 	go heartbeatLoop(heartbeatCtx, *altairURL, consumerID)
