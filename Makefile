@@ -26,3 +26,9 @@ perf-validate-heavy:
 
 perf-cleanup:
 	@bash ./perf/cleanup.sh
+
+perf-load-interactive:
+	@INTERACTIVE=1 bash ./perf/load.sh
+
+perf-validate-interactive:
+	@INTERACTIVE=1 bash ./perf/validate.sh heavy $(EXAMPLE)

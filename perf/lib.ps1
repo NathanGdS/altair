@@ -27,8 +27,50 @@ function Get-EnvOrDefault([string]$name, [string]$default) {
 # preference is relaxed locally (assignment inside a function only affects its own scope).
 function Invoke-Compose {
     $ErrorActionPreference = "Continue"
-    docker compose -f docker-compose.yml --profile load @args
+    docker compose @(Get-ComposeFiles) --profile load @args
     if ($LASTEXITCODE -ne 0) { throw "docker compose $args failed with exit code $LASTEXITCODE" }
+}
+
+# Same as Invoke-Compose with stdin closed: `compose run`/`exec` forward stdin to the container,
+# which would swallow the interactive Enter/q (or piped input).
+function Invoke-ComposeNoStdin {
+    $ErrorActionPreference = "Continue"
+    $null | docker compose @(Get-ComposeFiles) --profile load @args
+    if ($LASTEXITCODE -ne 0) { throw "docker compose $args failed with exit code $LASTEXITCODE" }
+}
+
+# Set to $true by the scripts' -Interactive switch: publishes the UI/stats ports (see
+# docker-compose.ui.yml) only for interactive runs.
+$PerfInteractive = $false
+
+function Get-ComposeFiles {
+    $files = @("-f", "docker-compose.yml")
+    if ($PerfInteractive) { $files += @("-f", "docker-compose.ui.yml") }
+    return $files
+}
+
+function Assert-InteractivePorts {
+    foreach ($name in @("ALTAIR_UI_PORT", "CONSUMER_STATS_PORT")) {
+        $value = [Environment]::GetEnvironmentVariable($name)
+        if ($value -and $value -notmatch '^[0-9]+$') { throw "$name must be a port number, got '$value'" }
+    }
+}
+
+function Show-UiUrls([switch]$WithConsumer) {
+    Write-Host "      altair UI:      http://localhost:$(Get-EnvOrDefault 'ALTAIR_UI_PORT' '8080')"
+    if ($WithConsumer) { Write-Host "      consumer stats: http://localhost:$(Get-EnvOrDefault 'CONSUMER_STATS_PORT' '9090')/stats" }
+}
+
+# Prints the prompt and waits for a line. $true to go on (Enter); $false on "q" or EOF, so a run
+# with no console attached (e.g. CI) finishes and cleans up instead of hanging.
+function Read-PerfPrompt([string]$message) {
+    Write-Host $message -NoNewline
+    if ([Console]::IsInputRedirected) { $answer = [Console]::In.ReadLine() } else { $answer = Read-Host }
+    if ($null -eq $answer) {
+        Write-Host ""
+        return $false
+    }
+    return @("q", "Q") -notcontains $answer.Trim()
 }
 
 # Runs a docker command whose failure is expected/harmless (resource may not exist).
@@ -90,7 +132,7 @@ function Write-Requests([string]$origin) {
 # so example images need no HTTP tooling of their own. $null when the consumer is not up yet.
 function Get-ConsumerReceived {
     $ErrorActionPreference = "Continue"
-    $stats = docker compose -f docker-compose.yml exec -T altair wget -qO- http://consumer:9090/stats 2>$null
+    $stats = $null | docker compose -f docker-compose.yml exec -T altair wget -qO- http://consumer:9090/stats 2>$null
     if ($LASTEXITCODE -ne 0 -or -not $stats) { return $null }
     return [int64]($stats | ConvertFrom-Json).received
 }
@@ -115,6 +157,8 @@ function Invoke-PerfSetup {
     $ErrorActionPreference = "Continue"
     Remove-PerfStack
 
+    Invoke-DockerQuiet info
+    if ($LASTEXITCODE -ne 0) { throw "Docker daemon is not reachable" }
     Invoke-DockerQuiet buildx inspect $PerfBuilder
     if ($LASTEXITCODE -ne 0) {
         Invoke-DockerQuiet image inspect $BuildkitImage
@@ -148,7 +192,10 @@ function Invoke-PerfCleanup([switch]$Force) {
     Invoke-DockerQuiet buildx rm -f $PerfBuilder
     if (Test-Path $BuildkitMarker) {
         Invoke-DockerQuiet image rm $BuildkitImage
-        Remove-Item -Force $BuildkitMarker
+        # Keep the marker while the image still exists (e.g. the daemon was down), so a later
+        # cleanup.ps1 still knows the image is ours to remove.
+        Invoke-DockerQuiet image inspect $BuildkitImage
+        if ($LASTEXITCODE -ne 0) { Remove-Item -Force $BuildkitMarker }
     }
     if (Test-Path $RunDir) { Remove-Item -Recurse -Force $RunDir }
 }

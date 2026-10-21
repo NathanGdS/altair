@@ -87,6 +87,18 @@ Performance tests run inside Docker so the broker gets a fixed resource budget a
 .\perf\validate.ps1 -Mode heavy -Example all
 ```
 
+**Interactive mode** — watch the dashboard while the load runs. Only in this mode are the altair UI and the consumer's `/stats` published, and only on `127.0.0.1` (`ALTAIR_UI_PORT`, default `8080`; `CONSUMER_STATS_PORT`, default `9090`):
+
+```bash
+INTERACTIVE=1 ./perf/load.sh                # make perf-load-interactive
+INTERACTIVE=1 ./perf/validate.sh heavy      # make perf-validate-interactive [EXAMPLE=...]
+.\perf\validate.ps1 -Mode heavy -Interactive
+```
+
+1. The stack comes up and prints the URLs, then waits for Enter.
+2. Enter fires a round (load, plus drain and verdict for `validate`). After each round, Enter fires another round on the same stack and `q` finishes. `validate` checks every round against cumulative totals, since the consumer counter and `deliveries/failed` accumulate.
+3. Everything is cleaned up. Ctrl+C at any point, or EOF on stdin (e.g. CI), also finishes and cleans up instead of hanging. Not available with `all`.
+
 Which examples can be validated and what counts as PASS for each (`perf.env`: origin, exact vs at-least delivery, expected `deliveries/failed`, drain timeout, limits) is defined by the contract in [examples/README.md](examples/README.md).
 
 Tunables (env vars): `ALTAIR_CPUS`, `ALTAIR_MEM`, `LOADER_CPUS`, `LOADER_MEM`, `CONNECTIONS`, `DURATION`, `PIPELINING`, `REQUEST` (`smoke`|`heavy`, `load` only), any `perf.env` key (overrides the example's file) and `KEEP=1` to leave the stack up after the run (single example only). Every run starts from fresh volumes.

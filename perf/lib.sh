@@ -15,9 +15,36 @@ run_dir=".run"
 # Keys an examples/<name>/perf.env may set (see examples/README.md).
 perf_env_keys=" ORIGIN EXPECT EXPECT_FAILED DRAIN_IDLE_TIMEOUT CONSUMER_CPUS CONSUMER_MEM CONSUMER_ARGS "
 
-compose() { docker compose -f docker-compose.yml --profile load "$@"; }
+compose() {
+  local files=(-f docker-compose.yml)
+  [ "${INTERACTIVE:-0}" != "1" ] || files+=(-f docker-compose.ui.yml)
+  docker compose "${files[@]}" --profile load "$@"
+}
 
 die() { echo "ERROR: $*" >&2; exit 2; }
+
+require_interactive_ports() {
+  [[ "${ALTAIR_UI_PORT:-8080}" =~ ^[0-9]+$ ]] || die "ALTAIR_UI_PORT must be a port number, got '$ALTAIR_UI_PORT'"
+  [[ "${CONSUMER_STATS_PORT:-9090}" =~ ^[0-9]+$ ]] || die "CONSUMER_STATS_PORT must be a port number, got '$CONSUMER_STATS_PORT'"
+}
+
+print_ui_urls() {
+  echo "      altair UI:      http://localhost:${ALTAIR_UI_PORT:-8080}"
+  [ "${1:-}" != "with-consumer" ] || echo "      consumer stats: http://localhost:${CONSUMER_STATS_PORT:-9090}/stats"
+}
+
+# Prints the prompt and waits for a line. Succeeds to go on (Enter); fails on "q" or EOF, so a
+# run with no terminal attached (e.g. CI) finishes and cleans up instead of hanging.
+prompt_continue() {
+  local answer
+  printf '%s' "$1"
+  if ! IFS= read -r answer; then
+    echo
+    return 1
+  fi
+  answer="${answer%$'\r'}"
+  [ "$answer" != "q" ] && [ "$answer" != "Q" ]
+}
 
 # Example names double as image names, hence the lowercase-only charset.
 list_examples() {
@@ -70,7 +97,7 @@ render_requests() {
 # Prints the consumer's received count, probed from the altair container over the stack network
 # so example images need no HTTP tooling of their own. Empty when the consumer is not up yet.
 consumer_received() {
-  compose exec -T altair wget -qO- http://consumer:9090/stats 2>/dev/null \
+  compose exec -T altair wget -qO- http://consumer:9090/stats 2>/dev/null </dev/null \
     | grep -o '"received":[0-9]*' | grep -o '[0-9]*$' || true
 }
 
@@ -88,6 +115,7 @@ wait_for_consumer() {
 perf_setup() {
   perf_teardown_stack
 
+  docker info >/dev/null 2>&1 || die "Docker daemon is not reachable"
   if ! docker buildx inspect "$perf_builder" >/dev/null 2>&1; then
     docker image inspect "$buildkit_image" >/dev/null 2>&1 || touch "$buildkit_marker"
     docker buildx create --name "$perf_builder" --driver docker-container >/dev/null
@@ -116,7 +144,9 @@ perf_cleanup() {
   docker buildx rm -f "$perf_builder" >/dev/null 2>&1 || true
   if [ -f "$buildkit_marker" ]; then
     docker image rm "$buildkit_image" >/dev/null 2>&1 || true
-    rm -f "$buildkit_marker"
+    # Keep the marker while the image still exists (e.g. the daemon was down), so a later
+    # cleanup.sh still knows the image is ours to remove.
+    docker image inspect "$buildkit_image" >/dev/null 2>&1 || rm -f "$buildkit_marker"
   fi
   rm -rf "$run_dir"
 }
