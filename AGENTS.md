@@ -21,7 +21,18 @@ go test ./handlers/ -run TestPublishHandler
 
 # Build
 go build ./...
+
+# Performance tests (Docker, resource-limited: altair 2 CPU / 4 GB)
+make perf-load              # ./perf/load.sh   — raw autocannon load at /publish
+make perf-validate          # ./perf/validate.sh smoke — 500 publishes against EXAMPLE (default 01-consumer)
+make perf-validate-heavy    # ./perf/validate.sh heavy — duration-based load
+make perf-validate EXAMPLE=all   # every examples/*/ with a Dockerfile, then a PASS/FAIL summary
+make perf-load-interactive       # INTERACTIVE=1: UI on 127.0.0.1:8080, Enter = new round, q = finish
+make perf-validate-interactive   # same for validate; consumer /stats on 127.0.0.1:9090
+make perf-cleanup           # remove every Docker resource the perf scripts created
 ```
+
+Performance tests never run the app directly on the host: `perf/docker-compose.yml` runs `altair`, `consumer` (any `examples/<name>`) and `loader` (autocannon) as separate containers with their own CPU/memory limits, broker data on named volumes. Limits and load shape are env-tunable (see README "Performance Test"). A new example must follow the contract in `examples/README.md` (Dockerfile, flags, `GET /stats`, optional `perf.env`); the perf stack itself never needs editing for it. Runs must leave no Docker resources behind.
 
 ## Workflow Rules (from .cursor/rules)
 

@@ -1,0 +1,72 @@
+# Isolated performance environment: each service gets its own CPU/memory budget so the load
+# generator and the webhook consumer never steal cycles from the broker under test.
+name: altair-perf
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "3"
+
+services:
+  altair:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: altair:perf
+    cpus: ${ALTAIR_CPUS:-2}
+    mem_limit: ${ALTAIR_MEM:-4g}
+    # Same as mem_limit: no swap, an OOM is a real result rather than a silent slowdown.
+    memswap_limit: ${ALTAIR_MEM:-4g}
+    ulimits:
+      nofile: { soft: 65536, hard: 65536 }
+    # Named volumes live on the Docker engine's own filesystem (not a host bind mount), so
+    # append-only writes hit a real disk with the same fsync/page-cache behavior as a server.
+    volumes:
+      - messages:/app/messages
+      - deliveries:/app/deliveries
+      - data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+    logging: *logging
+
+  # Any example under examples/<EXAMPLE>/ that follows the contract in examples/README.md.
+  # No healthcheck here on purpose: the scripts probe GET /stats from the altair container, so
+  # an example image does not need wget/curl or any other tooling of its own.
+  consumer:
+    build:
+      context: ..
+      dockerfile: examples/${EXAMPLE:-01-consumer}/Dockerfile
+    image: altair-example-${EXAMPLE:-01-consumer}:perf
+    command: >-
+      -altair-url=http://altair:8080 -webhook-host=consumer -port=9090
+      -origin=${ORIGIN:-stress-test} ${CONSUMER_ARGS:-}
+    cpus: ${CONSUMER_CPUS:-1}
+    mem_limit: ${CONSUMER_MEM:-512m}
+    depends_on:
+      altair:
+        condition: service_healthy
+    logging: *logging
+
+  loader:
+    build:
+      context: loader
+    image: altair-loader:perf
+    profiles: ["load"]
+    cpus: ${LOADER_CPUS:-2}
+    mem_limit: ${LOADER_MEM:-1g}
+    # Payloads rendered by the scripts from perf/request-*.json with ORIGIN filled in.
+    volumes:
+      - ./.run:/requests:ro
+    depends_on:
+      altair:
+        condition: service_healthy
+    logging: *logging
+
+volumes:
+  messages:
+  deliveries:
+  data:

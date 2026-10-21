@@ -1,5 +1,5 @@
 {
-  "origin": "examples-consumer",
+  "origin": "{{ORIGIN}}",
   "data": {
     "id": "1",
     "name": "John Doe",

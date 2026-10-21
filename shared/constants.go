@@ -27,5 +27,7 @@ var (
 )
 
 func getWorkingPool() int {
-	return runtime.NumCPU() * 2
+	// GOMAXPROCS (not NumCPU) so the pool honors container CPU limits: since Go 1.25 it is
+	// derived from the cgroup CPU quota, while NumCPU always reports every host core.
+	return runtime.GOMAXPROCS(0) * 2
 }

@@ -2,3 +2,6 @@ messages
 data
 .cursor
 deliveries
+perf/.buildkit-pulled
+
+perf/.run/

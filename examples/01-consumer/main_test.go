@@ -25,3 +25,27 @@ func TestNewMux(t *testing.T) {
 		assert.JSONEq(t, `{"received": 2}`, statsResponse.Body.String())
 	})
 }
+
+func TestBuildWebhookURL(t *testing.T) {
+	t.Run("defaults to localhost for host runs", func(t *testing.T) {
+		// Arrange
+		host, port := "localhost", "9090"
+
+		// Act
+		url := buildWebhookURL(host, port)
+
+		// Assert
+		assert.Equal(t, "http://localhost:9090/webhook", url)
+	})
+
+	t.Run("uses the given host so altair can reach the consumer across containers", func(t *testing.T) {
+		// Arrange
+		host, port := "consumer", "9090"
+
+		// Act
+		url := buildWebhookURL(host, port)
+
+		// Assert
+		assert.Equal(t, "http://consumer:9090/webhook", url)
+	})
+}

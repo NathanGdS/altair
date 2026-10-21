@@ -1,0 +1,11 @@
+# Added on top of docker-compose.yml only in interactive mode (INTERACTIVE=1 / -Interactive), so a
+# normal run publishes nothing and never clashes with a locally running altair. Bound to
+# 127.0.0.1 so the UI and stats are reachable from this machine only, never from the network.
+services:
+  altair:
+    ports:
+      - "127.0.0.1:${ALTAIR_UI_PORT:-8080}:8080"
+
+  consumer:
+    ports:
+      - "127.0.0.1:${CONSUMER_STATS_PORT:-9090}:9090"

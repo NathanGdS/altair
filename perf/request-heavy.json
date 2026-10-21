@@ -1,4 +1,5 @@
 {
+  "origin": "{{ORIGIN}}",
   "stress-test": true,
   "data": {
     "id": "1",
